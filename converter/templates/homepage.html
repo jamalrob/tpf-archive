@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Philosophy Forum Archive - Page {page_num}</title>
+    <link rel="stylesheet" href="/assets/css/style.css?v={css_version}">
+</head>
+<body>
+    {header_html}
+    <main>
+        <p>{total_discussions} total discussions</p>
+
+        <!-- Top Pagination -->
+        {top_pagination}
+
+        <section class="discussions-list">
+            <h2>Discussions {start_idx}-{end_idx}</h2>
+            {discussions_list}
+        </section>
+        
+        <!-- Bottom Pagination -->
+        {bottom_pagination}
+    </main>
+    {footer_html}
+</body>
+</html>

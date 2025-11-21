@@ -1,0 +1,438 @@
+/* Enhanced CSS for BBCode formatting */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body { 
+    font-family: "Helvetica Neue",Helvetica,arial,-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6; 
+    color: #333;
+    margin: 0 auto;
+    font-size: 19px;
+}
+
+/* Quote Styling */
+blockquote {
+    margin: 15px 0;
+    padding: 12px 15px;
+    border-left: 4px solid #4a90e2;
+    background: #f8f9fa;
+    border-radius: 0 4px 4px 0;
+}
+
+blockquote.user-quote {
+    border-left-color: #28a745;
+    background: #f0f9f0;
+}
+
+blockquote.simple-quote {
+    border-left-color: #6c757d;
+    background: #f8f9fa;
+}
+
+blockquote cite {
+    display: block;
+    font-weight: bold;
+    color: #495057;
+    margin-bottom: 8px;
+    font-size: 0.9em;
+}
+
+blockquote cite:before {
+    content: "💬 ";
+}
+
+/* Reply link styling */
+.reply-link {
+    background: #e8f4f8;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #1565c0;
+    text-decoration: none;
+    font-weight: 500;
+    border: 1px solid #b3e5fc;
+}
+
+.reply-link:hover {
+    background: #b3e5fc;
+    text-decoration: underline;
+}
+
+/* User Mentions */
+.user-mention {
+    background: #e3f2fd;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #1565c0;
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.user-mention:hover {
+    background: #bbdefb;
+    text-decoration: underline;
+}
+
+.user-mention.unknown {
+    background: #f5f5f5;
+    color: #666;
+    border: 1px solid #ddd;
+}
+
+/* Quote link styling */
+.quote-link {
+    display: block;
+    background: #e8f5e8;
+    padding: 8px 12px;
+    border-radius: 4px;
+    color: #2e7d32;
+    text-decoration: none;
+    font-weight: 500;
+    margin-bottom: 8px;
+    border-left: 3px solid #4caf50;
+}
+
+.quote-link:hover {
+    background: #c8e6c9;
+    text-decoration: underline;
+}        
+
+/* Links */
+.external-link {
+    color: #0066cc;
+    text-decoration: none;
+    border-bottom: 1px solid #0066cc;
+}
+
+.external-link:hover {
+    background: #f0f7ff;
+}
+
+/* Rest of the styles... */
+
+header h3 {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-top: 10px
+}
+
+nav a { 
+    margin-right: 15px; 
+    text-decoration: none;
+    color: #0066cc;
+    font-weight: 500;
+}
+
+nav a:hover {
+    text-decoration: underline;
+}
+
+.discussion-container { 
+    max-width: 800px; 
+    margin: 0 auto; 
+}
+
+.discussion-header h1 { 
+    margin-bottom: 10px; 
+    color: #222;
+}
+
+.discussion-meta, .comment-meta { 
+    color: #666; 
+    font-size: 0.9em; 
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+.discussion-meta span, .comment-meta span { 
+    margin-right: 15px; 
+}
+
+.comment-id {
+    background: #e9ecef;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 0.8em;
+}
+
+.comment-id a {
+    color: #666;
+    text-decoration: none;
+}
+
+.comment-id a:hover {
+    color: #333;
+}
+
+.discussion-content, .comment-content { 
+    margin-bottom: 30px; 
+    padding: 15px;
+    background: #f9f9f9;
+    border-radius: 5px;
+}
+
+.discussion-content {
+    box-shadow: 7px 5px 7px 0px rgba(170,170,170,0.53);        
+    border: 1px solid #ddd; 
+}
+
+.comment { 
+    border: 1px solid #ddd; 
+    padding-left: 15px; 
+    margin-bottom: 20px;
+    -webkit-box-shadow: 7px 5px 7px 0px rgba(170,170,170,0.53); 
+    box-shadow: 7px 5px 7px 0px rgba(170,170,170,0.53);            
+    padding-top: 12px;
+    border-radius: 5px;
+}
+
+.discussion-summary {
+    border-bottom: 1px solid #eee;
+    padding: 15px 0;
+}
+
+.discussion-summary h3 {
+    margin-bottom: 5px;
+}
+
+.discussion-summary a {
+    text-decoration: none;
+    color: #222;
+}
+
+.discussion-summary a:hover {
+    color: #0066cc;
+}
+
+.user-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 3px;
+    border: 1px solid #ddd;
+}
+
+.media-embed {
+    padding: 10px;
+    background: #f0f0f0;
+    border-radius: 3px;
+    margin: 10px 0;
+    border-left: 3px solid #ffc107;
+}
+
+pre {
+    background: #f4f4f4;
+    padding: 10px;
+    border-radius: 3px;
+    overflow-x: auto;
+    border: 1px solid #ddd;
+}
+
+code {
+    font-family: 'Courier New', monospace;
+    background: #f4f4f4;
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+footer {
+    margin-top: 50px;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+    color: #666;
+    text-align: center;
+}
+
+.search-container {
+    margin: 20px 0;
+}
+
+#searchInput {
+    padding: 10px;
+    width: 300px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    margin-right: 10px;
+}
+
+button {
+    padding: 10px 20px;
+    background: #0066cc;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #0052a3;
+}
+
+.search-result {
+    margin: 15px 0;
+    padding: 15px;
+    border: 1px solid #eee;
+    border-radius: 5px;
+}
+
+.search-result h3 {
+    margin-bottom: 8px;
+}
+
+.search-result p {
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.search-result small {
+    color: #999;
+}
+
+/* Pagination Styles */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin: 30px 0;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.pagination-arrow {
+    padding: 8px 16px;
+    background: #0066cc;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.pagination-arrow:hover {
+    background: #0052a3;
+    text-decoration: none;
+}
+
+.pagination-arrow.disabled {
+    background: #ccc;
+    color: #666;
+    cursor: not-allowed;
+}
+
+.page-info {
+    font-weight: 500;
+    color: #333;
+}
+
+/* List Styles */
+ol, ul {
+    margin: 15px 0;
+    padding-left: 30px;
+}
+
+li {
+    margin: 5px 0;
+    line-height: 1.5;
+}
+
+ol {
+    list-style-type: decimal;
+}
+
+ol[type="a"] {
+    list-style-type: lower-alpha;
+}
+
+ol[type="A"] {
+    list-style-type: upper-alpha;
+}
+
+ol[type="i"] {
+    list-style-type: lower-roman;
+}
+
+ol[type="I"] {
+    list-style-type: upper-roman;
+}
+
+ul {
+    list-style-type: disc;
+}
+
+/* Full-width header */
+header {
+    background: #10a064;
+    box-shadow: 0 2px 4px -1px rgba(0,0,0,0.25);
+    width: 100%;
+    top: 0;
+    z-index: 1000;
+    color: #fff;
+    padding-bottom: 10px; 
+    padding-top: 10px; 
+    margin-bottom: 30px;            
+    display: flex; /* Add this */
+    align-items: flex-end; /* Align items to bottom */
+    justify-content: space-between; /* Logo left, nav right */
+    margin: 0 auto 15px; /* Center the header */
+    padding-left: 20px; /* Add some side padding */
+    padding-right: 20px;
+    height: 70px;
+}
+
+.inner-container {
+    width: 1200px;
+    min-width: 720px;
+    margin: 0 auto;
+    display: flex;
+}
+
+div.logo {
+    /* Remove the max-width and margin from here */
+    /* max-width: 1200px; */
+    /* margin: 0 auto; */
+}
+
+div.logo img {
+  max-height: 50px;
+}        
+
+.logo img {
+    max-height: 50px;
+    display: block; /* Remove extra space below image */
+}
+
+header nav {
+    /* Remove these styles as they're now handled by the header flexbox */
+    /* max-width: 1200px; */
+    /* margin: 0 auto; */
+    /* height: 100%; */
+    /* display: flex; */
+    /* align-items: center; */
+    
+    /* Add this to push nav to bottom */
+    align-self: flex-end;
+    margin-bottom: 5px; /* Adjust this to control distance from bottom */
+    margin-left: auto;
+}
+
+header nav a {
+    margin: 0 10px;
+    text-decoration: none;
+    color: white;
+    font-weight: 500;
+    padding: 8px 12px 8px 0;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+header nav a:hover {
+    /*background: rgba(255, 255, 255, 0.2);*/
+    text-decoration: underline;
+}
+
+/* Main content container */
+main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}

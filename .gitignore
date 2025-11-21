@@ -1,0 +1,11 @@
+/exports/
+/build/
+notes.txt
+
+/converter/__pycache__/
+/converter/*.pyc
+/converter/*.pyo
+/converter/*.pyd  
+/converter/env/
+/converter/.Python
+/converter/temp/
