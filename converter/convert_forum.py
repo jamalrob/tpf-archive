@@ -19,6 +19,7 @@ class PlushForumsConverter:
         self.comments = {}
         self.members = {}
         self._css_version = None  # ← Cache the version
+        self.categories = {}  # ADD THIS LINE
         
         print(f"Export path: {self.export_path}")
         print(f"Output path: {self.output_path}")
@@ -40,6 +41,18 @@ class PlushForumsConverter:
                 self._css_version = 1
         return self._css_version
 
+    def load_category_data(self):
+        """Load category data from categories/all.json"""
+        categories_path = self.export_path / "categories" / "all.json"
+        if categories_path.exists():
+            with open(categories_path, 'r', encoding='utf-8') as f:
+                categories = json.load(f)
+            self.categories = {cat['CategoryID']: cat for cat in categories}
+            print(f"Loaded {len(self.categories)} categories")
+        else:
+            print("No categories file found")
+            self.categories = {}
+
     def copy_assets(self):
         """Copy static assets from source to build directory"""
         source_assets = Path(__file__).parent / "assets"
@@ -56,6 +69,12 @@ class PlushForumsConverter:
             print(f"✅ Copied assets from {source_assets} to {target_assets}")
         else:
             print("⚠️  No source assets directory found")
+
+        # Copy robots.txt to root
+        robots_source = Path(__file__).parent / "robots.txt"
+        if robots_source.exists():
+            shutil.copy2(robots_source, self.output_path / "robots.txt")
+            print("✅ Copied robots.txt to root")            
 
 
     def load_member_data(self):
@@ -128,6 +147,9 @@ class PlushForumsConverter:
     
     def load_data(self):
         """Load all discussions and comments"""
+
+        self.load_category_data()
+
         print("Loading discussions...")
         self._load_discussions()
         
@@ -555,7 +577,9 @@ class PlushForumsConverter:
             'slug': slug,
             'url': f"/discussions/{disc_id}-{slug}.html",
             'comment_count': len(discussion_comments),
-            'author_id': author_id
+            'author_id': author_id,
+            'category_id': discussion.get('CategoryID'),
+            'category_name': self.categories.get(discussion.get('CategoryID'), {}).get('Name', 'Uncategorized')
         }
     
     def generate_user_posts_data(self, discussions_meta):
@@ -753,6 +777,29 @@ class PlushForumsConverter:
                 print(f"✅ Found in Janus's data: {[c['id'] for c in janus_found]}")
             else:
                 print("❌ Not found in Janus's processed data")        
+
+    def generate_about_page(self):
+        """Generate an About page for the forum export"""
+        template_path = Path(__file__).parent / "templates" / "about.html"
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template = f.read()
+        
+        css_version = self.get_css_version()
+
+        header_html = self.load_template('header.html')
+        footer_html = self.load_template('footer.html')        
+        
+        html_content = template.format(
+            header_html=header_html,
+            footer_html=footer_html,            
+            css_version=css_version
+        )
+        
+        output_file = self.output_path / "about.html"
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        
+        print(f"Generated About page: {output_file}")
 
 
     def generate_your_posts_page(self, discussions_meta):
@@ -1145,8 +1192,11 @@ class PlushForumsConverter:
             
             # Generate discussions list
             discussions_list = ""
+            # In generate_homepage(), where you build discussions_list:
             for disc in page_discussions:
                 author_name = self.get_username(disc['author_id'])
+                category_name = self.categories.get(disc['category_id'], {}).get('Name', 'Uncategorized')  # Add this line
+                
                 discussions_list += f"""
                     <article class="discussion-summary">
                         <h3><a href="{disc['url']}">{html.escape(disc['title'])}</a></h3>
@@ -1154,6 +1204,7 @@ class PlushForumsConverter:
                             <span class="author">by {html.escape(author_name)}</span>
                             <span class="date">{self.format_date(disc['date'])}</span>
                             <span class="comments">{disc['comment_count']} comments</span>
+                            <span class="category">{html.escape(category_name)}</span>  <!-- Add this line -->
                         </div>
                     </article>
                 """
@@ -1184,12 +1235,19 @@ class PlushForumsConverter:
 
     
     def generate_search_page(self, discussions_meta):
-        """Generate search page with slimmed-down search data (titles and authors only)"""
+        """Generate search page with category filtering"""
         search_data = []
         
         for disc in discussions_meta:
             # Only include discussion titles and authors for search
             discussion = self.discussions[disc['id']]
+            
+            # Get category info
+            category_id = discussion.get('CategoryID')
+            category_name = "Uncategorized"
+            if category_id and category_id in self.categories:
+                category_name = self.categories[category_id]['Name']
+            
             search_data.append({
                 'title': discussion['Name'],
                 'author': self.get_username(discussion['InsertUserID']),
@@ -1197,13 +1255,29 @@ class PlushForumsConverter:
                 'type': 'discussion',
                 'date': discussion['DateInserted'],
                 'comment_count': len(self.comments.get(disc['id'], [])),
-                'id': f"discussion-{disc['id']}"
+                'id': f"discussion-{disc['id']}",
+                'category_id': category_id,  # Add category ID
+                'category_name': category_name  # Add category name
             })
         
-        # Write slimmed-down search data as JSON
+        # Generate categories list for dropdown
+        categories_list = []
+        for cat_id, cat_info in self.categories.items():
+            categories_list.append({
+                'id': cat_id,
+                'name': cat_info['Name']
+            })
+        
+        # Sort categories by name
+        categories_list.sort(key=lambda x: x['name'])
+        
+        # Write enhanced search data as JSON
         search_js_content = f"""
     if (typeof window.searchData === 'undefined') {{
         window.searchData = {json.dumps(search_data, ensure_ascii=False, indent=2)};
+    }}
+    if (typeof window.searchCategories === 'undefined') {{
+        window.searchCategories = {json.dumps(categories_list, ensure_ascii=False, indent=2)};
     }}
     """
         
@@ -1303,6 +1377,7 @@ class PlushForumsConverter:
         else:
             print("Skipping user posts data generation in html-only mode...")
         
+        self.generate_about_page()
         self.generate_your_posts_page(discussions_meta)
 
         # Generate indexes (these are quick to regenerate)
@@ -1327,6 +1402,10 @@ class PlushForumsConverter:
         
         with open(data_dir / "members.json", 'w', encoding='utf-8') as f:
             json.dump(self.members, f, ensure_ascii=False, indent=2)
+        
+        # ADD THIS: Save categories data
+        with open(data_dir / "categories.json", 'w', encoding='utf-8') as f:
+            json.dump(self.categories, f, ensure_ascii=False, indent=2)
         
         print(f"Saved processed data to {data_dir}")
 
@@ -1353,7 +1432,13 @@ class PlushForumsConverter:
                 # Convert string keys back to integers for members
                 self.members = {int(k): v for k, v in members_data.items()}
             
-            print(f"Loaded {len(self.discussions)} discussions, {len(self.comments)} comment threads, {len(self.members)} members")
+            # ADD THIS: Load categories data
+            with open(data_dir / "categories.json", 'r', encoding='utf-8') as f:
+                categories_data = json.load(f)
+                # Convert string keys back to integers for categories
+                self.categories = {int(k): v for k, v in categories_data.items()}
+            
+            print(f"Loaded {len(self.discussions)} discussions, {len(self.comments)} comment threads, {len(self.members)} members, {len(self.categories)} categories")
             return True
         except Exception as e:
             print(f"Error loading processed data: {e}")

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Search - Philosophy Forum Archive</title>
     <link rel="stylesheet" href="/assets/css/style.css?v={css_version}">
+    <meta name="robots" content="noindex, nofollow">
 </head>
 <body>
     {header_html}
@@ -32,6 +33,10 @@
                         <option value="newest">Newest First</option>
                         <option value="oldest">Oldest First</option>
                     </select>
+                    <select id="categoryFilter">
+                        <option value="">All Categories</option>
+                        <!-- Categories will be populated by JavaScript -->
+                    </select>                
                 </div>
             </div>
             <button id="searchButton" style="padding: 12px 24px;">Search</button>

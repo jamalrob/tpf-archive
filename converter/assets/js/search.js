@@ -15,8 +15,9 @@
         const searchInput = document.getElementById('searchInput');
         const authorFilter = document.getElementById('authorFilter');
         const dateSort = document.getElementById('dateSort');
+        const categoryFilter = document.getElementById('categoryFilter');
         
-        if (!searchInput || !authorFilter || !dateSort) {
+        if (!searchInput || !authorFilter || !dateSort || !categoryFilter) {
             console.error('Search elements not found');
             return;
         }
@@ -24,6 +25,7 @@
         const query = searchInput.value.trim().toLowerCase();
         const authorFilterValue = authorFilter.value.trim().toLowerCase();
         const sortBy = dateSort.value;
+        const selectedCategory = categoryFilter.value;
         
         const resultsContainer = document.getElementById('searchResults');
         const statsContainer = document.getElementById('searchStats');
@@ -33,8 +35,8 @@
         resultsContainer.innerHTML = '';
         statsContainer.innerHTML = '';
         
-        if (!query && !authorFilterValue) {
-            resultsContainer.innerHTML = '<div class="no-results">Please enter a search term or author name.</div>';
+        if (!query && !authorFilterValue && !selectedCategory) {
+            resultsContainer.innerHTML = '<div class="no-results">Please enter a search term, author name, or select a category.</div>';
             return;
         }
         
@@ -58,7 +60,12 @@
                     return false;
                 }
                 
-                return item.score > 0 || authorFilterValue;
+                // Apply category filter if specified
+                if (selectedCategory && item.category_id != selectedCategory) {
+                    return false;
+                }
+                
+                return item.score > 0 || authorFilterValue || selectedCategory;
             });
         
         // Sort results
@@ -84,6 +91,10 @@
         if (authorFilterValue) {
             statsText += ` by authors containing "${authorFilterValue}"`;
         }
+        if (selectedCategory) {
+            const categoryName = window.searchCategories?.find(cat => cat.id == selectedCategory)?.name || 'Selected Category';
+            statsText += ` in ${categoryName}`;
+        }
         statsContainer.innerHTML = statsText;
         
         currentResults.forEach((result, index) => {
@@ -97,6 +108,7 @@
                 <div class="result-meta">
                     By <strong>${highlightMatches(result.author, [authorFilterValue])}</strong> • ${new Date(result.date).toLocaleDateString()}
                     • ${result.comment_count || 0} comments
+                    ${result.category_name ? `• ${result.category_name}` : ''}
                 </div>
             `;
             resultsContainer.appendChild(resultElement);
@@ -150,6 +162,7 @@
     function initializeSearch() {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function() {
+                initCategoryFilter();
                 setupSearch();
             });
         } else {
@@ -165,6 +178,7 @@
         
         const searchInput = document.getElementById('searchInput');
         const authorFilter = document.getElementById('authorFilter');
+        const categoryFilter = document.getElementById('categoryFilter'); // ADD THIS
         
         if (searchInput) {
             searchInput.addEventListener('keypress', function(e) {
@@ -181,6 +195,23 @@
                 }
             });
         }
+       
+
+    }
+
+    // Initialize category dropdown when page loads
+    function initCategoryFilter() {
+        const categoryFilter = document.getElementById('categoryFilter');
+        
+        if (!window.searchCategories || !categoryFilter) return;
+        
+        // Add categories to dropdown
+        window.searchCategories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category.id;
+            option.textContent = category.name;
+            categoryFilter.appendChild(option);
+        });
     }
 
     // Initialize search when script loads
