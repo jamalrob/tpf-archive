@@ -65,7 +65,14 @@
                     return false;
                 }
                 
-                return item.score > 0 || authorFilterValue || selectedCategory;
+                // Only require search score if we're actually searching by text
+                // If we're only filtering by author/category, don't require a text match
+                if (searchTerms.length > 0) {
+                    return item.score > 0;
+                } else {
+                    // If no search terms, just return items that passed the author/category filters
+                    return true;
+                }
             });
         
         // Sort results

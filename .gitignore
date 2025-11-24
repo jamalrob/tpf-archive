@@ -1,5 +1,6 @@
 /exports/
 /build/
+/dm-converter/dm_output/
 notes.txt
 
 /converter/__pycache__/

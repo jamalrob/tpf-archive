@@ -25,7 +25,6 @@
                     <input type="text" id="authorFilter" placeholder="Username...">
                     <div class="author-hint">Leave empty to search all authors</div>
                 </div>
-                
                 <div class="filter-group">
                     <label for="dateSort">Sort By</label>
                     <select id="dateSort">
@@ -33,6 +32,9 @@
                         <option value="newest">Newest First</option>
                         <option value="oldest">Oldest First</option>
                     </select>
+                </div>
+                <div class="filter-group">
+                    <label for="categoryFilter">Category</label>
                     <select id="categoryFilter">
                         <option value="">All Categories</option>
                         <!-- Categories will be populated by JavaScript -->
@@ -48,8 +50,8 @@
     
     {footer_html}
 
-    <!-- Load slimmed-down search data -->
-    <script src="/assets/js/search-data.js"></script>
-    <script src="/assets/js/search.js"></script>    
+    <script src="/assets/js/categories-data.js?v={css_version}"></script>
+    <script src="/assets/js/search-data.js?v={css_version}"></script>
+    <script src="/assets/js/search.js?v={css_version}"></script>    
 </body>
 </html>

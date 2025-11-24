@@ -24,6 +24,38 @@ class PlushForumsConverter:
         print(f"Export path: {self.export_path}")
         print(f"Output path: {self.output_path}")
 
+    def fix_windows_1252_encoding(self, text):
+        """Fix Windows-1252 encoded characters in JSON data"""
+        if not text:
+            return text
+        
+        # Mapping of Windows-1252 byte values to proper Unicode characters
+        windows_1252_mapping = {
+            '\u0080': '€', '\u0081': '', '\u0082': '‚', '\u0083': 'ƒ', '\u0084': '„', 
+            '\u0085': '…', '\u0086': '†', '\u0087': '‡', '\u0088': 'ˆ', '\u0089': '‰',
+            '\u008A': 'Š', '\u008B': '‹', '\u008C': 'Œ', '\u008D': '', '\u008E': 'Ž',
+            '\u008F': '', '\u0090': '', '\u0091': '‘', '\u0092': '’', '\u0093': '“',
+            '\u0094': '”', '\u0095': '•', '\u0096': '–', '\u0097': '—', '\u0098': '˜',
+            '\u0099': '™', '\u009A': 'š', '\u009B': '›', '\u009C': 'œ', '\u009D': '',
+            '\u009E': 'ž', '\u009F': 'Ÿ'
+        }
+        
+        # Replace Windows-1252 encoded characters
+        for win_char, unicode_char in windows_1252_mapping.items():
+            text = text.replace(win_char, unicode_char)
+        
+        return text
+
+
+    def get_category_name(self, category_id):
+        """Get category name from ID, fallback to 'Uncategorized' if not found"""
+        if category_id in self.categories:
+            return self.categories[category_id]['Name']
+        else:
+            print(f"DEBUG: Category ID {category_id} not found in categories data")
+            return "Uncategorized"
+
+
     def load_template(self, template_name):
         """Load template file with CSS version"""
         template_path = Path(__file__).parent / "templates" / template_name
@@ -159,42 +191,48 @@ class PlushForumsConverter:
         print(f"Loaded {len(self.discussions)} discussions and {len(self.comments)} comments")
     
     def _load_discussions(self):
-        """Load all discussion files, excluding CategoryID 21"""
+        """Load all discussion files, excluding CategoryID 21 and 22"""
         discussions_path = self.export_path / "discussions"
         if not discussions_path.exists():
             print(f"ERROR: Discussions path not found: {discussions_path}")
             return
             
-        category_21_count = 0
+        excluded_categories = [21, 22]  # Moderators and Editors: Private Group
+        excluded_counts = {21: 0, 22: 0}
         total_discussions = 0
         
         for batch_dir in discussions_path.iterdir():
             if batch_dir.is_dir():
                 for json_file in batch_dir.glob("*.json"):
                     try:
-                        # Try different encodings if needed
                         with open(json_file, 'r', encoding='utf-8') as f:
                             discussion = json.load(f)
-                        
-                        # DEBUG: Check for apostrophes in the loaded data
-                        if "'" in discussion.get('Body', '') or "’" in discussion.get('Body', ''):
-                            print(f"DEBUG: Apostrophes in discussion {discussion['DiscussionID']}: {discussion['Body'][:100]}...")
-                        
+
+                        # FIX THE ENCODING ISSUE
+                        if 'Body' in discussion:
+                            discussion['Body'] = self.fix_windows_1252_encoding(discussion['Body'])
+                        if 'Name' in discussion:
+                            discussion['Name'] = self.fix_windows_1252_encoding(discussion['Name'])
+
                         total_discussions += 1
                         
-                        # Check if CategoryID exists and is not 21
+                        # Check if CategoryID exists and is not in excluded categories
                         category_id = discussion.get('CategoryID')
-                        if category_id == 21:
-                            category_21_count += 1
-                            print(f"Excluding discussion {discussion['DiscussionID']} - CategoryID 21: {discussion['Name'][:50]}...")
+                        if category_id in excluded_categories:
+                            excluded_counts[category_id] += 1
+                            print(f"Excluding discussion {discussion['DiscussionID']} - CategoryID {category_id}: {discussion['Name'][:50]}...")
                             continue
                             
+                        # Add category name to discussion data for easy access
+                        discussion['CategoryName'] = self.get_category_name(category_id)
                         self.discussions[discussion['DiscussionID']] = discussion
                             
                     except Exception as e:
                         print(f"Error loading {json_file}: {e}")
         
-        print(f"Loaded {len(self.discussions)} discussions (excluded {category_21_count} with CategoryID 21)")
+        print(f"Loaded {len(self.discussions)} discussions (excluded {excluded_counts[21]} with CategoryID 21, {excluded_counts[22]} with CategoryID 22)")
+        print(f"Total discussions processed: {total_discussions}")
+        
         print(f"Total discussions processed: {total_discussions}")
     
 
@@ -210,7 +248,7 @@ class PlushForumsConverter:
 
 
     def _load_comments(self):
-        """Load all comment files"""
+        """Load all comment files, excluding comments from excluded discussions"""
         comments_path = self.export_path / "comments"
         if not comments_path.exists():
             print(f"ERROR: Comments path not found: {comments_path}")
@@ -224,6 +262,9 @@ class PlushForumsConverter:
                             comments_batch = json.load(f)
                             for comment in comments_batch:
                                 disc_id = comment['DiscussionID']
+                                # Skip comments from excluded discussions
+                                if disc_id not in self.discussions:
+                                    continue
                                 if disc_id not in self.comments:
                                     self.comments[disc_id] = []
                                 self.comments[disc_id].append(comment)
@@ -1263,6 +1304,10 @@ class PlushForumsConverter:
         # Generate categories list for dropdown
         categories_list = []
         for cat_id, cat_info in self.categories.items():
+            # Skip Moderators category
+            if cat_info['Name'] == 'Moderators' or cat_info['Name'] == 'Editors: Private Group':
+                continue
+
             categories_list.append({
                 'id': cat_id,
                 'name': cat_info['Name']
@@ -1271,14 +1316,21 @@ class PlushForumsConverter:
         # Sort categories by name
         categories_list.sort(key=lambda x: x['name'])
         
-        # Write enhanced search data as JSON
+        # Create a fast lookup object for categories
+        category_lookup = {cat['id']: cat['name'] for cat in categories_list}
+        
+        # Write categories data separately (small file)
+        categories_js_content = f"""
+    window.searchCategories = {json.dumps(categories_list, ensure_ascii=False)};
+    window.categoryLookup = {json.dumps(category_lookup, ensure_ascii=False)};
+    """
+        
+        with open(self.output_path / "assets" / "js" / "categories-data.js", 'w', encoding='utf-8') as f:
+            f.write(categories_js_content)
+        
+        # Write search data separately (large file)
         search_js_content = f"""
-    if (typeof window.searchData === 'undefined') {{
-        window.searchData = {json.dumps(search_data, ensure_ascii=False, indent=2)};
-    }}
-    if (typeof window.searchCategories === 'undefined') {{
-        window.searchCategories = {json.dumps(categories_list, ensure_ascii=False, indent=2)};
-    }}
+    window.searchData = {json.dumps(search_data, ensure_ascii=False)};
     """
         
         with open(self.output_path / "assets" / "js" / "search-data.js", 'w', encoding='utf-8') as f:
@@ -1360,7 +1412,10 @@ class PlushForumsConverter:
                     'slug': slug,
                     'url': f"/discussions/{disc_id}-{slug}.html",
                     'comment_count': len(discussion_comments),
-                    'author_id': discussion['InsertUserID']
+                    'author_id': discussion['InsertUserID'],
+                    # ADD THESE TWO LINES:
+                    'category_id': discussion.get('CategoryID'),
+                    'category_name': self.categories.get(discussion.get('CategoryID'), {}).get('Name', 'Uncategorized')
                 })
         
         # Copy static assets
