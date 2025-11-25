@@ -1,38 +1,22 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{title} - Philosophy Forum Archive</title>
-    <link rel="stylesheet" href="/assets/css/style.css?v={css_version}">
-    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-    <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-    <meta name="bingbot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-</head>
-<body>
-    {header_html}
-    <main class="discussion-container">
-        <article class="discussion">
-            <div class="discussion-header" id="discussion-top">
-                <h1>{discussion_title}</h1>
-                <div class="discussion-meta">
-                    <span class="author">{author_name}</span>
-                    <span class="date">{discussion_date}</span>
-                    <span class="views">{view_count} views</span>
-                    <span class="comments">{comment_count} comments</span>
-                </div>
+<main class="discussion-container">
+    <article class="discussion">
+        <div class="discussion-header" id="discussion-top">
+            <h1>{discussion_title}</h1>
+            <div class="discussion-meta">
+                <span class="author">{author_name}</span>
+                <span class="date">{discussion_date}</span>
+                <span class="views">{view_count} views</span>
+                <span class="comments">{comment_count} comments</span>
             </div>
-            
-            <div class="discussion-content">
-                {discussion_body}
-            </div>
-        </article>
+        </div>
         
-        <section class="comments">
-            <h2>Comments ({comment_count})</h2>
-            {comments_html}
-        </section>
-    </main>
-    {footer_html}
-</body>
-</html>
+        <div class="discussion-content">
+            {discussion_body}
+        </div>
+    </article>
+    
+    <section class="comments">
+        <h2>Comments ({comment_count})</h2>
+        {comments_html}
+    </section>
+</main>

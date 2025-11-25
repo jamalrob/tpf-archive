@@ -1,79 +1,62 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Posts - Philosophy Forum Archive</title>
-    <link rel="stylesheet" href="/assets/css/style.css?v={css_version}">
-    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-    <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-    <meta name="bingbot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-</head>
-<body>
-    {header_html}
-    <main class="your-posts-container">
-        <h1>Find Your Posts</h1>
-        <p>Enter your exact username to find all your discussions and comments in the archive.</p>
+<main class="your-posts-container">
+    <h1>Find Your Posts</h1>
+    <p>Enter your exact username to find all your discussions and comments in the archive.</p>
+    
+    <div class="author-selector">
+        <div class="form-group">
+            <label for="usernameInput">Your Username:</label>
+            <input type="text" id="usernameInput" placeholder="Enter your exact username...">
+            <div class="form-hint">Make sure to use the exact username as it appears in the forum</div>
+        </div>
         
-        <div class="author-selector">
-            <div class="form-group">
-                <label for="usernameInput">Your Username:</label>
-                <input type="text" id="usernameInput" placeholder="Enter your exact username...">
-                <div class="form-hint">Make sure to use the exact username as it appears in the forum</div>
-            </div>
-            
-            <div class="form-group">
-                <label>Content Type:</label>
-                <div class="content-type-selector">
-                    <div class="content-type-option">
-                        <input type="radio" id="contentDiscussions" name="contentType" value="discussions">
-                        <label for="contentDiscussions">
-                            Discussions Only
-                        </label>
-                    </div>
-                    <div class="content-type-option">
-                        <input type="radio" id="contentBoth" name="contentType" value="both" checked>
-                        <label for="contentBoth">
-                            Both Discussions & Comments
-                        </label>
-                    </div>
-                    <div class="content-type-option">
-                        <input type="radio" id="contentComments" name="contentType" value="comments">
-                        <label for="contentComments">
-                            Comments Only
-                        </label>
-                    </div>
+        <div class="form-group">
+            <label>Content Type:</label>
+            <div class="content-type-selector">
+                <div class="content-type-option">
+                    <input type="radio" id="contentDiscussions" name="contentType" value="discussions">
+                    <label for="contentDiscussions">
+                        Discussions Only
+                    </label>
+                </div>
+                <div class="content-type-option">
+                    <input type="radio" id="contentBoth" name="contentType" value="both" checked>
+                    <label for="contentBoth">
+                        Both Discussions & Comments
+                    </label>
+                </div>
+                <div class="content-type-option">
+                    <input type="radio" id="contentComments" name="contentType" value="comments">
+                    <label for="contentComments">
+                        Comments Only
+                    </label>
                 </div>
             </div>
-            
-            <button id="findPostsBtn" class="action-btn">Find My Posts</button>
         </div>
         
-        <div id="loadingIndicator" class="loading" style="display: none;">
-            Loading your posts...
-        </div>
-        
-        <div id="errorMessage" class="error" style="display: none;"></div>
-        
-        <div id="resultsSection" class="results-section" style="display: none;">
-            <div class="stats" id="statsInfo"></div>
-            
-            <div class="download-section">
-                <h3>Download Your Posts</h3>
-                <p id="downloadDescription">Download all your posts as a simple text file for personal archive.</p>
-                <button id="downloadBtn" class="action-btn" disabled>Download as Text File</button>
-            </div>
+        <button id="findPostsBtn" class="action-btn">Find My Posts</button>
+    </div>
+    
+    <!--<div id="loadingIndicator" class="loading" style="display: none;">
+        Loading your posts...
+    </div>-->
 
-            <div id="postsList"></div>
-            
+    <div id="loadingIndicator" class="loading" style="display: none;">
+        <div class="spinner"></div>
+        <p>Searching... This may take a while for users with many posts.</p>
+    </div>    
+    
+    <div id="errorMessage" class="error" style="display: none;"></div>
+    
+    <div id="resultsSection" class="results-section" style="display: none;">
+        <div class="stats" id="statsInfo"></div>
+        
+        <div class="download-section">
+            <h3>Download Your Posts</h3>
+            <p id="downloadDescription">Download all your posts as a simple text file for personal archive.</p>
+            <button id="downloadBtn" class="action-btn" disabled>Download as Text File</button>
         </div>
-    </main>
-    {footer_html}
-    <!-- Load user lookup data -->
-    <script src="/assets/js/user-lookup.js"></script>
 
-    <script>
-        {{javascript_content}}
-    </script>
-</body>
-</html>
+        <div id="postsList"></div>
+        
+    </div>
+</main>

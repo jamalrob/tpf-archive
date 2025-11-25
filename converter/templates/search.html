@@ -1,59 +1,38 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Search - Philosophy Forum Archive</title>
-    <link rel="stylesheet" href="/assets/css/style.css?v={css_version}">
-    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-    <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-    <meta name="bingbot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
-</head>
-<body>
-    {header_html}
-    <main class="search-interface">
-        <h1>Search Forum Archive</h1>
-        <p>Search discussion titles and authors only</p>
-        
-        <div class="search-controls">
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <input type="text" id="searchInput" placeholder="Search discussion titles..." 
-                      style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
-            </div>
-            
-            <div class="search-filters">
-                <div class="filter-group">
-                    <label for="authorFilter">Filter by Author</label>
-                    <input type="text" id="authorFilter" placeholder="Username...">
-                    <div class="author-hint">Leave empty to search all authors</div>
-                </div>
-                <div class="filter-group">
-                    <label for="dateSort">Sort By</label>
-                    <select id="dateSort">
-                        <option value="relevance">Relevance</option>
-                        <option value="newest">Newest First</option>
-                        <option value="oldest">Oldest First</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label for="categoryFilter">Category</label>
-                    <select id="categoryFilter">
-                        <option value="">All Categories</option>
-                        <!-- Categories will be populated by JavaScript -->
-                    </select>                
-                </div>
-            </div>
-            <button id="searchButton" style="padding: 12px 24px;">Search</button>
+<main class="search-interface">
+    <h1>Search Forum Archive</h1>
+    <p>Search discussion titles and authors only</p>
+    
+    <div class="search-controls">
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="text" id="searchInput" placeholder="Search discussion titles..." 
+                  style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
         </div>
         
-        <div class="search-stats" id="searchStats"></div>
-        <div id="searchResults"></div>
-    </main>
+        <div class="search-filters">
+            <div class="filter-group">
+                <label for="authorFilter">Filter by Author</label>
+                <input type="text" id="authorFilter" placeholder="Username...">
+                <div class="author-hint">Leave empty to search all authors</div>
+            </div>
+            <div class="filter-group">
+                <label for="dateSort">Sort By</label>
+                <select id="dateSort">
+                    <option value="relevance">Relevance</option>
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="categoryFilter">Category</label>
+                <select id="categoryFilter">
+                    <option value="">All Categories</option>
+                    <!-- Categories will be populated by JavaScript -->
+                </select>                
+            </div>
+        </div>
+        <button id="searchButton" style="padding: 12px 24px;">Search</button>
+    </div>
     
-    {footer_html}
-
-    <script src="/assets/js/categories-data.js?v={css_version}"></script>
-    <script src="/assets/js/search-data.js?v={css_version}"></script>
-    <script src="/assets/js/search.js?v={css_version}"></script>    
-</body>
-</html>
+    <div class="search-stats" id="searchStats"></div>
+    <div id="searchResults"></div>
+</main>

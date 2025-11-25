@@ -12,17 +12,147 @@ from pathlib import Path
 import html
 
 class PlushForumsConverter:
-    def __init__(self, export_path, output_path):
-        self.export_path = Path(export_path).resolve()
-        self.output_path = Path(output_path).resolve()
+    def __init__(self, config_path=None):
+        if config_path is None:
+            config_path = Path(__file__).parent / "config.json"
+        
+        # Load config directly - will crash if file missing (good for visibility)
+        with open(config_path, 'r', encoding='utf-8') as f:
+            self.config = json.load(f)
+        
+        self.export_path = Path(self.config['export_path']).resolve()
+        self.output_path = Path(self.config['output_path']).resolve()
+        
+        # Initialize other attributes
         self.discussions = {}
         self.comments = {}
         self.members = {}
-        self._css_version = None  # ← Cache the version
-        self.categories = {}  # ADD THIS LINE
+        self.categories = {}
+        self._cssversion = None
+        self._template_cache = {}  # ← Store templates here
         
         print(f"Export path: {self.export_path}")
         print(f"Output path: {self.output_path}")
+
+
+    def generate_user_search_index(self, discussions_meta):
+        """Generate a lightweight search index for fast username lookup"""
+        print("Building user search index...")
+        
+        # Build username -> user_id mapping and count posts per user
+        user_post_counts = {}
+        
+        # Count discussions per user
+        for disc in discussions_meta:
+            user_id = disc['author_id']
+            user_post_counts[user_id] = user_post_counts.get(user_id, 0) + 1
+        
+        # Count comments per user  
+        for disc_id, comments in self.comments.items():
+            for comment in comments:
+                user_id = comment['InsertUserID']
+                user_post_counts[user_id] = user_post_counts.get(user_id, 0) + 1
+        
+        # Build the index
+        search_index = {
+            'usernames': {},  # lowercase_username -> user_id
+            'post_counts': user_post_counts,
+            'total_users': 0
+        }
+        
+        # Add username mappings
+        for user_id, username in self.members.items():
+            search_index['usernames'][username.lower()] = user_id
+        
+        search_index['total_users'] = len(search_index['usernames'])
+        
+        # Write the index file
+        index_file = self.output_path / "assets" / "js" / "user-search-index.js"
+        index_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(index_file, 'w', encoding='utf-8') as f:
+            f.write(f"window.userSearchIndex = {json.dumps(search_index, ensure_ascii=False)};")
+        
+        print(f"✅ Created search index with {search_index['total_users']} users")
+
+
+    def generate_user_data_chunks(self, discussions_meta):
+        """Generate user data chunks efficiently"""
+        print("Building user data chunks efficiently...")
+        
+        # Pre-organize data by user_id for O(1) lookups
+        user_discussions = {}
+        user_comments = {}
+        
+        # Build discussions by user (O(n) instead of O(n×m))
+        for disc in discussions_meta:
+            user_id = disc['author_id']
+            if user_id not in user_discussions:
+                user_discussions[user_id] = []
+            
+            discussion = self.discussions[disc['id']]
+            user_discussions[user_id].append({
+                'id': disc['id'],
+                'title': disc['title'], 
+                'date': disc['date'],
+                'url': disc['url'],
+                'excerpt': discussion.get('Body', '')[:200] + '...' if len(discussion.get('Body', '')) > 200 else discussion.get('Body', '')
+            })
+        
+        # Build comments by user (O(n) instead of O(n×m))  
+        for disc_id, comments in self.comments.items():
+            for comment in comments:
+                user_id = comment['InsertUserID']
+                if user_id not in user_comments:
+                    user_comments[user_id] = []
+                
+                disc_title = self.discussions[disc_id]['Name'] if disc_id in self.discussions else "Unknown Discussion"
+                user_comments[user_id].append({
+                    'id': comment['CommentID'],
+                    'discussion_id': disc_id,
+                    'discussion_title': disc_title,
+                    'date': comment['DateInserted'],
+                    'url': f"/discussions/{disc_id}-{self.generate_slug(disc_title)}.html#comment-{comment['CommentID']}",
+                    'excerpt': comment.get('Body', '')[:150] + '...' if len(comment.get('Body', '')) > 150 else comment.get('Body', '')
+                })
+        
+        # Now chunk users (this part is fast)
+        chunk_size = 50
+        all_users = list(self.members.keys())
+        user_chunks = {}
+        
+        for chunk_num, i in enumerate(range(0, len(all_users), chunk_size)):
+            chunk_user_ids = all_users[i:i + chunk_size]
+            chunk_data = {}
+            
+            for user_id in chunk_user_ids:
+                username = self.get_username(user_id)
+                user_data = {
+                    'username': username,
+                    'discussions': user_discussions.get(user_id, []),
+                    'comments': user_comments.get(user_id, [])
+                }
+                chunk_data[user_id] = user_data
+                
+                # Store chunk mapping
+                user_chunks[user_id] = chunk_num
+            
+            # Write chunk file
+            chunk_file = self.output_path / "assets" / "user-chunks" / f"chunk-{chunk_num}.js"
+            chunk_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(chunk_file, 'w', encoding='utf-8') as f:
+                f.write(f"window.userChunk{chunk_num} = {json.dumps(chunk_data, ensure_ascii=False)};")
+            
+            print(f"Created chunk {chunk_num} with {len(chunk_user_ids)} users")
+        
+        # Write chunk mapping
+        mapping_file = self.output_path / "assets" / "js" / "user-chunk-mapping.js"
+        with open(mapping_file, 'w', encoding='utf-8') as f:
+            f.write(f"window.userChunkMapping = {json.dumps(user_chunks, ensure_ascii=False)};")
+        
+        print(f"✅ Created {len(user_chunks)} user mappings across {(len(all_users) + chunk_size - 1) // chunk_size} chunks")
+
 
     def fix_windows_1252_encoding(self, text):
         """Fix Windows-1252 encoded characters in JSON data"""
@@ -57,21 +187,31 @@ class PlushForumsConverter:
 
 
     def load_template(self, template_name):
-        """Load template file with CSS version"""
+        # Check if we already loaded this template
+        if template_name in self._template_cache:
+            return self._template_cache[template_name]  # ← Return cached version
+        
+        # If not cached, read from disk
         template_path = Path(__file__).parent / "templates" / template_name
         with open(template_path, 'r', encoding='utf-8') as f:
             template = f.read()
-        return template.replace('{css_version}', str(self.get_css_version()))
+        
+        template = template.replace('{cssversion}', str(self.get_cssversion()))
+        
+        # Store in cache for next time
+        self._template_cache[template_name] = template
+        return template
 
-    def get_css_version(self):
+
+    def get_cssversion(self):
         """Get CSS version (cached per conversion run)"""
-        if self._css_version is None:
+        if self._cssversion is None:
             css_file = Path(__file__).parent / "assets" / "css" / "style.css"
             if css_file.exists():
-                self._css_version = int(css_file.stat().st_mtime)
+                self._cssversion = int(css_file.stat().st_mtime)
             else:
-                self._css_version = 1
-        return self._css_version
+                self._cssversion = 1
+        return self._cssversion
 
     def load_category_data(self):
         """Load category data from categories/all.json"""
@@ -190,6 +330,7 @@ class PlushForumsConverter:
         
         print(f"Loaded {len(self.discussions)} discussions and {len(self.comments)} comments")
     
+
     def _load_discussions(self):
         """Load all discussion files, excluding CategoryID 21 and 22"""
         discussions_path = self.export_path / "discussions"
@@ -197,7 +338,7 @@ class PlushForumsConverter:
             print(f"ERROR: Discussions path not found: {discussions_path}")
             return
             
-        excluded_categories = [21, 22]  # Moderators and Editors: Private Group
+        excluded_categories = self.config['excluded_categories']
         excluded_counts = {21: 0, 22: 0}
         total_discussions = 0
         
@@ -236,17 +377,6 @@ class PlushForumsConverter:
         print(f"Total discussions processed: {total_discussions}")
     
 
-    def debug_discussion_structure(self):
-        """Print the structure of a sample discussion to see available fields"""
-        if self.discussions:
-            sample_discussion = next(iter(self.discussions.values()))
-            print("\n=== Discussion Structure ===")
-            print("Available keys:", list(sample_discussion.keys()))
-            print("Sample discussion data:")
-            for key, value in sample_discussion.items():
-                print(f"  {key}: {value}")
-
-
     def _load_comments(self):
         """Load all comment files, excluding comments from excluded discussions"""
         comments_path = self.export_path / "comments"
@@ -265,6 +395,11 @@ class PlushForumsConverter:
                                 # Skip comments from excluded discussions
                                 if disc_id not in self.discussions:
                                     continue
+                                
+                                # FIX THE ENCODING FOR COMMENTS TOO!
+                                if 'Body' in comment:
+                                    comment['Body'] = self.fix_windows_1252_encoding(comment['Body'])
+                                
                                 if disc_id not in self.comments:
                                     self.comments[disc_id] = []
                                 self.comments[disc_id].append(comment)
@@ -419,13 +554,6 @@ class PlushForumsConverter:
         has_ordered_lists = re.search(r'\[list=([^\]]+)\](.*?)\[/list\]', text, flags=re.DOTALL)
         has_unordered_lists = re.search(r'\[list\](.*?)\[/list\]', text, flags=re.DOTALL)
         
-        if has_ordered_lists or has_unordered_lists:
-            print(f"DEBUG: Found lists in text (length: {len(text)})")
-            if has_ordered_lists:
-                print(f"DEBUG: Ordered list found: {has_ordered_lists.group(0)[:100]}...")
-            if has_unordered_lists:
-                print(f"DEBUG: Unordered list found: {has_unordered_lists.group(0)[:100]}...")
-        
         # Step 10: Convert lists
         # Numbered lists [list=1] or [list=a]
         text = re.sub(
@@ -441,35 +569,6 @@ class PlushForumsConverter:
             text, flags=re.DOTALL
         )
 
-        # DEBUG: Check for ALL types of dashes at the very beginning
-        dash_types = {
-            'en-dash': '–',
-            'em-dash': '—',
-            'figure-dash': '‒', 
-            'horizontal-bar': '―',
-            'swung-dash': '⁓',
-            'minus': '−'
-        }
-        
-        # Only show debug for texts that actually contain dashes to reduce noise
-        has_dashes = any(char in text for char in dash_types.values())  # DEFINE has_dashes HERE
-
-        # After processing, check again if we had dashes originally
-        if has_dashes:
-            print("After processing - checking for dashes:")
-            dashes_after = []
-            for name, char in dash_types.items():
-                if char in text:
-                    count = text.count(char)
-                    dashes_after.append((name, char, count))
-            
-            if dashes_after:
-                print(f"Dashes after processing: {dashes_after}")
-            else:
-                print("No dash characters after processing")
-            
-            print(f"=== DEBUG convert_plush_bbcode END ===\n")
-        
         return text
     
     def _convert_user_mention(self, match):
@@ -546,6 +645,7 @@ class PlushForumsConverter:
         slug = re.sub(r'[-\s]+', '-', slug)
         return slug[:50]
     
+
     def generate_discussion_page(self, discussion):
         disc_id = discussion['DiscussionID']
         slug = self.generate_slug(discussion['Name'])
@@ -579,29 +679,35 @@ class PlushForumsConverter:
                     </div>
                 </div>"""
         
-        # Read template
-        template_path = Path(__file__).parent / "templates" / "discussion.html"
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template = f.read()
-        
-        css_version = self.get_css_version()
+        # Load layout and content templates
+        layout_template = self.load_template('layout.html')
+        content_template = self.load_template('discussion.html')
+
+        cssversion = self.get_cssversion()
 
         header_html = self.load_template('header.html')
-        footer_html = self.load_template('footer.html')        
+        footer_html = self.load_template('footer.html')
 
-        # Render template
-        html_content = template.format(
-            header_html=header_html,
-            footer_html=footer_html,            
-            title=html.escape(discussion['Name']),
+        # Render content first
+        main_content = content_template.format(
             discussion_title=html.escape(discussion['Name']),
             author_name=html.escape(author_name),
             discussion_date=self.format_date(discussion['DateInserted']),
             view_count=discussion['CountViews'],
             comment_count=len(discussion_comments),
             discussion_body=discussion_body,
-            comments_html=comments_html,
-            css_version=css_version
+            comments_html=comments_html
+        )
+
+        # Then render layout with content
+        html_content = layout_template.format(
+            title=html.escape(discussion['Name']),
+            cssversion=cssversion,
+            extrahead="",
+            extrafoot="",
+            header=header_html,
+            main=main_content,
+            footer=footer_html
         )
         
         # Write file
@@ -660,7 +766,7 @@ class PlushForumsConverter:
                 'content': discussion.get('Body', '')[:500] + '...' if len(discussion.get('Body', '')) > 500 else discussion.get('Body', ''),
                 'full_content': discussion.get('Body', '')  # Keep full content for download
             })
-        
+
         # Process comments
         for disc_id, comments in self.comments.items():
             for comment in comments:
@@ -690,54 +796,12 @@ class PlushForumsConverter:
                     'full_content': comment.get('Body', '')  # Keep full content for download
                 })
         
-        # Print Janus debug info
-        if janus_user_id:
-            total_janus_posts = janus_discussions + janus_comments
-            print(f"🔍 JANUS DEBUG:")
-            print(f"   User ID: {janus_user_id}")
-            print(f"   Discussions: {janus_discussions}")
-            print(f"   Comments: {janus_comments}")
-            print(f"   Total posts: {total_janus_posts}")
-            
-            # Also check what's in the final user data
-            if janus_user_id in user_posts_map:
-                final_discussions = len(user_posts_map[janus_user_id]['discussions'])
-                final_comments = len(user_posts_map[janus_user_id]['comments'])
-                print(f"   In user_posts_map: {final_discussions} discussions, {final_comments} comments")
-                print(f"   Final total: {final_discussions + final_comments}")
-
-        # After the existing Janus debug section, add this:
-        if janus_user_id and janus_user_id in user_posts_map:
-            comments = user_posts_map[janus_user_id]['comments']
-            
-            # Check for duplicates by CommentID
-            comment_ids = [c['id'] for c in comments]
-            unique_ids = set(comment_ids)
-            print(f"   Unique comment IDs: {len(unique_ids)}")
-            print(f"   Total comments in list: {len(comment_ids)}")
-            
-            if len(unique_ids) != len(comment_ids):
-                print(f"   ⚠️  DUPLICATES FOUND: {len(comment_ids) - len(unique_ids)} duplicate comments!")
-                
-                # Find and show some duplicates
-                from collections import Counter
-                duplicate_counts = Counter(comment_ids)
-                duplicates = {cid: count for cid, count in duplicate_counts.items() if count > 1}
-                print(f"   Duplicate CommentIDs (first 5): {list(duplicates.keys())[:5]}")
-            else:
-                print(f"   ✅ No duplicate CommentIDs found")
-            
-            # Also check if we're missing any status fields that might indicate deleted comments
-            if comments:
-                sample_comment = comments[0]
-                print(f"   Sample comment keys: {list(sample_comment.keys())}")                
-        
+       
         # Rest of the method continues...
         print(f"Created username lookup with {len(username_lookup)} users")
         # ... etc
         
         print(f"Created username lookup with {len(username_lookup)} users")
-        print(f"Sample users in lookup: {list(username_lookup.keys())[:5]}")
         
         # Write username lookup
         lookup_file = self.output_path / "assets" / "js" / "user-lookup.js"
@@ -781,59 +845,29 @@ class PlushForumsConverter:
         
         print(f"Written user index with {len(user_index)} users")
 
-        # Add this at the very end of the method:
-        print("\n🔍 CHECKING SPECIFIC COMMENT IDs:")
-        target_comment_ids = [169735, 169734]
-        found_comments = []
-        
-        # Search through all comments for the target IDs
-        for disc_id, comments in self.comments.items():
-            for comment in comments:
-                if comment['CommentID'] in target_comment_ids:
-                    found_comments.append({
-                        'comment_id': comment['CommentID'],
-                        'discussion_id': disc_id,
-                        'user_id': comment['InsertUserID'],
-                        'username': self.get_username(comment['InsertUserID']),
-                        'date': comment['DateInserted'],
-                        'body_preview': comment['Body'][:100] + '...' if len(comment['Body']) > 100 else comment['Body']
-                    })
-        
-        if found_comments:
-            print("✅ FOUND TARGET COMMENTS:")
-            for found in found_comments:
-                print(f"   CommentID {found['comment_id']}:")
-                print(f"     - User: {found['username']} (ID: {found['user_id']})")
-                print(f"     - Discussion: {found['discussion_id']}")
-                print(f"     - Date: {found['date']}")
-                print(f"     - Preview: {found['body_preview']}")
-        else:
-            print("❌ NONE of the target CommentIDs were found in the export data")
-        
-        # Also check if they exist in Janus's data specifically
-        if janus_user_id and janus_user_id in user_posts_map:
-            janus_comments = user_posts_map[janus_user_id]['comments']
-            janus_found = [c for c in janus_comments if c['id'] in target_comment_ids]
-            if janus_found:
-                print(f"✅ Found in Janus's data: {[c['id'] for c in janus_found]}")
-            else:
-                print("❌ Not found in Janus's processed data")        
 
     def generate_about_page(self):
         """Generate an About page for the forum export"""
-        template_path = Path(__file__).parent / "templates" / "about.html"
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template = f.read()
-        
-        css_version = self.get_css_version()
+        # Load layout and content templates
+        layout_template = self.load_template('layout.html')
+        content_template = self.load_template('about.html')
 
+        cssversion = self.get_cssversion()
         header_html = self.load_template('header.html')
-        footer_html = self.load_template('footer.html')        
-        
-        html_content = template.format(
-            header_html=header_html,
-            footer_html=footer_html,            
-            css_version=css_version
+        footer_html = self.load_template('footer.html')
+
+        # Render content first
+        main_content = content_template.format()
+
+        # Then render layout with content
+        html_content = layout_template.format(
+            title="About",
+            cssversion=cssversion,
+            header=header_html,
+            main=main_content,
+            footer=footer_html,
+            extrahead="",
+            extrafoot=""
         )
         
         output_file = self.output_path / "about.html"
@@ -846,355 +880,45 @@ class PlushForumsConverter:
     def generate_your_posts_page(self, discussions_meta):
         """Generate a page where users can find and download their posts"""
         
-        # Read the JavaScript content
-        javascript_content = """
-          let currentUserData = null;
-          let currentUserId = null;
-          let currentUsername = null;
-          let currentContentType = 'both';
+        # Load layout and content templates
+        layout_template = self.load_template('layout.html')
+        content_template = self.load_template('your-posts.html')
 
-          // Find user ID by username
-          async function findUserIdByUsername(username) {
-              try {
-                  // Load the user lookup data
-                  if (!window.userLookup) {
-                      const response = await fetch('/assets/js/user-lookup.js');
-                      if (response.ok) {
-                          // Execute the JavaScript to populate window.userLookup
-                          const scriptContent = await response.text();
-                          eval(scriptContent);
-                      } else {
-                          console.warn('User lookup file not found');
-                          return null;
-                      }
-                  }
-                  
-                  // Look up the user ID
-                  const userId = window.userLookup[username.toLowerCase()];
-                  console.log(`Looking up username "${username}" (lowercase: "${username.toLowerCase()}") -> ${userId}`);
-                  
-                  return userId || null;
-                  
-              } catch (error) {
-                  console.error('Error finding user ID:', error);
-                  return null;
-              }
-          }
-
-          // Load user data
-          async function loadUserData(userId) {
-              try {
-                  const response = await fetch(`/assets/user-data/${userId}.json`);
-                  if (!response.ok) throw new Error('User data not found');
-                  return await response.json();
-              } catch (error) {
-                  console.error('Error loading user data:', error);
-                  return null;
-              }
-          }
-
-          // Display posts based on content type
-          function displayPosts(userData, contentType = 'both') {
-              const postsList = document.getElementById('postsList');
-              let posts = [];
-              
-              if (contentType === 'both') {
-                  // Combine and sort by date
-                  posts = [...userData.discussions, ...userData.comments];
-                  posts.sort((a, b) => new Date(b.date) - new Date(a.date));
-              } else if (contentType === 'discussions') {
-                  posts = userData.discussions;
-              } else if (contentType === 'comments') {
-                  posts = userData.comments;
-              }
-              
-              if (posts.length === 0) {
-                  let message = 'No posts found.';
-                  if (contentType === 'discussions') message = 'No discussions found.';
-                  if (contentType === 'comments') message = 'No comments found.';
-                  postsList.innerHTML = `<p>${message}</p>`;
-                  return;
-              }
-              
-              let html = '';
-              posts.forEach(post => {
-                  const postType = post.discussion_title ? 'comment' : 'discussion';
-                  const typeDisplay = postType === 'discussion' ? 'Discussion' : 'Comment';
-                  const title = post.title || `Comment in: ${post.discussion_title}`;
-                  
-                  html += `
-                      <div class="post-item">
-                          <div class="post-header">
-                              <span class="post-type type-${postType}">${typeDisplay}</span>
-                              <span class="post-meta">${formatDate(post.date)}</span>
-                          </div>
-                          <div class="post-title">
-                              <a href="${post.url}" target="_blank">${escapeHtml(title)}</a>
-                          </div>
-                          <div class="post-content">${escapeHtml(post.content)}</div>
-                      </div>
-                  `;
-              });
-              
-              postsList.innerHTML = html;
-          }
-
-          // Find posts
-          async function findPosts() {
-              const usernameInput = document.getElementById('usernameInput');
-              const username = usernameInput.value.trim();
-              const contentType = document.querySelector('input[name="contentType"]:checked').value;
-              const loadingIndicator = document.getElementById('loadingIndicator');
-              const resultsSection = document.getElementById('resultsSection');
-              const errorMessage = document.getElementById('errorMessage');
-              const statsInfo = document.getElementById('statsInfo');
-              const downloadBtn = document.getElementById('downloadBtn');
-              const downloadDescription = document.getElementById('downloadDescription');
-              const findPostsBtn = document.getElementById('findPostsBtn');
-              
-              if (!username) {
-                  showError('Please enter your username.');
-                  return;
-              }
-              
-              // Clear previous results
-              errorMessage.style.display = 'none';
-              resultsSection.style.display = 'none';
-              downloadBtn.disabled = true;
-              currentContentType = contentType;
-              
-              // Show loading state on button
-              findPostsBtn.disabled = true;
-              findPostsBtn.innerHTML = '<span class="spinner"></span> Searching...';
-              findPostsBtn.classList.add('button-loading');
-              
-              // Show loading indicator
-              loadingIndicator.style.display = 'block';
-              
-              try {
-                  // Find user ID
-                  const userId = await findUserIdByUsername(username);
-                  console.log(`Found user ID for "${username}": ${userId}`);
-                  
-                  if (!userId) {
-                      showError(`User "${escapeHtml(username)}" not found. Please check your username and try again.`);
-                      resetButtonState();
-                      loadingIndicator.style.display = 'none';
-                      return;
-                  }
-                  
-                  // Load user data
-                  currentUserData = await loadUserData(userId);
-                  currentUserId = userId;
-                  currentUsername = username;
-                  
-                  if (!currentUserData) {
-                      showError('No posts found for this user.');
-                      resetButtonState();
-                      loadingIndicator.style.display = 'none';
-                      return;
-                  }
-                  
-                  // Update stats based on content type
-                  let totalPosts, statsText, badgeHtml;
-                  
-                  if (contentType === 'both') {
-                      totalPosts = currentUserData.discussions.length + currentUserData.comments.length;
-                      statsText = `Found <strong>${totalPosts}</strong> posts by <strong>${escapeHtml(username)}</strong>`;
-                      badgeHtml = `<span class="content-type-badge badge-both">Both</span>`;
-                      downloadDescription.textContent = 'Download all your discussions and comments as a simple text file.';
-                  } else if (contentType === 'discussions') {
-                      totalPosts = currentUserData.discussions.length;
-                      statsText = `Found <strong>${totalPosts}</strong> discussions by <strong>${escapeHtml(username)}</strong>`;
-                      badgeHtml = `<span class="content-type-badge badge-discussions">Discussions Only</span>`;
-                      downloadDescription.textContent = 'Download your discussions as a simple text file.';
-                  } else if (contentType === 'comments') {
-                      totalPosts = currentUserData.comments.length;
-                      statsText = `Found <strong>${totalPosts}</strong> comments by <strong>${escapeHtml(username)}</strong>`;
-                      badgeHtml = `<span class="content-type-badge badge-comments">Comments Only</span>`;
-                      downloadDescription.textContent = 'Download your comments as a simple text file.';
-                  }
-                  
-                  statsInfo.innerHTML = statsText; // + badgeHtml;
-                  
-                  // Always display posts based on selected content type (no pagination needed)
-                  displayPosts(currentUserData, contentType);
-                  
-                  // Enable download button
-                  downloadBtn.disabled = false;
-                  
-                  // Show results and reset button
-                  loadingIndicator.style.display = 'none';
-                  resultsSection.style.display = 'block';
-                  resetButtonState();
-                  
-              } catch (error) {
-                  loadingIndicator.style.display = 'none';
-                  resetButtonState();
-                  showError('Error loading posts. Please try again.');
-                  console.error(error);
-              }
-              
-              function resetButtonState() {
-                  findPostsBtn.disabled = false;
-                  findPostsBtn.innerHTML = 'Find My Posts';
-                  findPostsBtn.classList.remove('button-loading');
-              }
-          }
-
-          // Download posts
-          async function downloadPosts() {
-              if (!currentUserData || !currentUserId) {
-                  showError('No posts to download. Please find your posts first.');
-                  return;
-              }
-              
-              try {
-                  // Load full content for download
-                  const fullResponse = await fetch(`/assets/user-data/${currentUserId}.json`);
-                  const fullData = await fullResponse.json();
-                  
-                  let content = `Posts by ${currentUsername}\\n`;
-                  content += `Content type: ${currentContentType === 'both' ? 'Discussions and Comments' : currentContentType}\\n`;
-                  content += `Downloaded from Philosophy Forum Archive on ${new Date().toLocaleDateString()}\\n`;
-                  
-                  let totalPosts = 0;
-                  
-                  if (currentContentType === 'both' || currentContentType === 'discussions') {
-                      totalPosts += fullData.discussions.length;
-                  }
-                  if (currentContentType === 'both' || currentContentType === 'comments') {
-                      totalPosts += fullData.comments.length;
-                  }
-                  
-                  content += `Total posts: ${totalPosts}\\n`;
-                  content += '='.repeat(50) + '\\n\\n';
-                  
-                  // Add discussions if selected
-                  if ((currentContentType === 'both' || currentContentType === 'discussions') && fullData.discussions.length > 0) {
-                      content += `DISCUSSIONS (${fullData.discussions.length})\\n`;
-                      content += '='.repeat(30) + '\\n';
-                      fullData.discussions.forEach((post, index) => {
-                          content += `\\nDISCUSSION ${index + 1}/${fullData.discussions.length}\\n`;
-                          content += `Date: ${formatDate(post.date)}\\n`;
-                          content += `Title: ${post.title}\\n`;
-                          content += `URL: ${window.location.origin}${post.url}\\n`;
-                          content += '-'.repeat(40) + '\\n';
-                          content += (post.full_content || post.content) + '\\n';
-                          content += '='.repeat(50) + '\\n\\n';
-                      });
-                  }
-                  
-                  // Add comments if selected
-                  if ((currentContentType === 'both' || currentContentType === 'comments') && fullData.comments.length > 0) {
-                      content += `COMMENTS (${fullData.comments.length})\\n`;
-                      content += '='.repeat(30) + '\\n';
-                      fullData.comments.forEach((post, index) => {
-                          content += `\\nCOMMENT ${index + 1}/${fullData.comments.length}\\n`;
-                          content += `Date: ${formatDate(post.date)}\\n`;
-                          content += `In discussion: ${post.discussion_title}\\n`;
-                          content += `URL: ${window.location.origin}${post.url}\\n`;
-                          content += '-'.repeat(40) + '\\n';
-                          content += (post.full_content || post.content) + '\\n';
-                          content += '='.repeat(50) + '\\n\\n';
-                      });
-                  }
-                  
-                  const blob = new Blob([content], { type: 'text/plain' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  
-                  let filename = `philosophy-forum-posts-${currentUsername.replace(/[^a-z0-9]/gi, '_')}`;
-                  if (currentContentType === 'discussions') filename += '-discussions';
-                  if (currentContentType === 'comments') filename += '-comments';
-                  filename += `-${new Date().toISOString().split('T')[0]}.txt`;
-                  
-                  a.download = filename;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(url);
-                  
-              } catch (error) {
-                  showError('Error downloading posts. Please try again.');
-                  console.error(error);
-              }
-          }
-
-          // Utility functions
-          function showError(message) {
-              const errorMessage = document.getElementById('errorMessage');
-              errorMessage.textContent = message;
-              errorMessage.style.display = 'block';
-          }
-
-          function formatDate(dateString) {
-              return new Date(dateString).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-              });
-          }
-
-          function escapeHtml(unsafe) {
-              return unsafe
-                  .replace(/&/g, "&amp;")
-                  .replace(/</g, "&lt;")
-                  .replace(/>/g, "&gt;")
-                  .replace(/"/g, "&quot;")
-                  .replace(/'/g, "&#039;");
-          }
-
-          // Initialize
-          document.addEventListener('DOMContentLoaded', function() {
-              document.getElementById('findPostsBtn').addEventListener('click', findPosts);
-              document.getElementById('downloadBtn').addEventListener('click', downloadPosts);
-              
-              // Allow Enter key to trigger search
-              document.getElementById('usernameInput').addEventListener('keypress', function(e) {
-                  if (e.key === 'Enter') {
-                      findPosts();
-                  }
-              });
-              
-              // Update content type badge when selection changes
-              document.querySelectorAll('input[name="contentType"]').forEach(radio => {
-                  radio.addEventListener('change', function() {
-                      // This will update the display when they search again
-                  });
-              });
-          });
-        """
-        
-        # Read template
-        template_path = Path(__file__).parent / "templates" / "your-posts.html"
-        with open(template_path, 'r', encoding='utf-8') as f:
-            html_content = f.read()
-        
-        # Simply replace the placeholder - no .format() needed
-        html_content = html_content.replace('{{javascript_content}}', javascript_content)
-
-        css_version = self.get_css_version()
-        html_content = html_content.replace('{css_version}', str(css_version))
-
+        cssversion = self.get_cssversion()
         header_html = self.load_template('header.html')
         footer_html = self.load_template('footer.html')
 
-        html_content = html_content.replace('{header_html}', str(header_html))
-        html_content = html_content.replace('{footer_html}', str(footer_html))
+        # Render content first (no JavaScript replacement needed)
+        main_content = content_template.format()
+
+        # Prepare extrafoot with both scripts
+        extrafoot = f"""
+        <script src="/assets/js/user-search-index.js?v={cssversion}"></script>
+        <script src="/assets/js/user-chunk-mapping.js?v={cssversion}"></script>
+        <script src="/assets/js/your-posts-fast.js?v={cssversion}"></script>
+        """
+
+        # Then render layout with content
+        html_content = layout_template.format(
+            title="Your Posts",
+            cssversion=cssversion,
+            header=header_html,
+            main=main_content,
+            footer=footer_html,
+            extrahead="",
+            extrafoot=extrafoot
+        )
         
         with open(self.output_path / "your-posts.html", 'w', encoding='utf-8') as f:
             f.write(html_content)
 
 
-    def generate_homepage(self, discussions_meta, page_size=50):
+    def generate_homepage(self, discussions_meta):
         """Generate paginated homepage with navigation at top and bottom"""
         discussions_meta.sort(key=lambda x: x['date'], reverse=True)
         
         # Split into pages
+        page_size = self.config['homepage_page_size']
         total_pages = (len(discussions_meta) + page_size - 1) // page_size
         
         def generate_pagination_html(current_page, total_pages):
@@ -1221,11 +945,6 @@ class PlushForumsConverter:
             pagination_html += '</div>'
             return pagination_html
         
-        # Read template
-        template_path = Path(__file__).parent / "templates" / "homepage.html"
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template = f.read()
-        
         for page_num in range(total_pages):
             start_idx = page_num * page_size
             end_idx = start_idx + page_size
@@ -1233,10 +952,9 @@ class PlushForumsConverter:
             
             # Generate discussions list
             discussions_list = ""
-            # In generate_homepage(), where you build discussions_list:
             for disc in page_discussions:
                 author_name = self.get_username(disc['author_id'])
-                category_name = self.categories.get(disc['category_id'], {}).get('Name', 'Uncategorized')  # Add this line
+                category_name = self.categories.get(disc['category_id'], {}).get('Name', 'Uncategorized')
                 
                 discussions_list += f"""
                     <article class="discussion-summary">
@@ -1245,28 +963,38 @@ class PlushForumsConverter:
                             <span class="author">by {html.escape(author_name)}</span>
                             <span class="date">{self.format_date(disc['date'])}</span>
                             <span class="comments">{disc['comment_count']} comments</span>
-                            <span class="category">{html.escape(category_name)}</span>  <!-- Add this line -->
+                            <span class="category">{html.escape(category_name)}</span>
                         </div>
                     </article>
                 """
 
-            css_version = self.get_css_version()
+            # Load layout and content templates
+            layout_template = self.load_template('layout.html')
+            content_template = self.load_template('homepage.html')
 
+            cssversion = self.get_cssversion()
             header_html = self.load_template('header.html')
-            footer_html = self.load_template('footer.html')            
+            footer_html = self.load_template('footer.html')
 
-            # Render template
-            html_content = template.format(
-                header_html=header_html,
-                footer_html=footer_html,                
-                page_num=page_num + 1,
+            # Render content first
+            main_content = content_template.format(
                 total_discussions=len(discussions_meta),
                 top_pagination=generate_pagination_html(page_num, total_pages),
                 bottom_pagination=generate_pagination_html(page_num, total_pages),
                 start_idx=start_idx + 1,
                 end_idx=min(end_idx, len(discussions_meta)),
-                discussions_list=discussions_list,
-                css_version=css_version
+                discussions_list=discussions_list
+            )
+
+            # Then render layout with content
+            html_content = layout_template.format(
+                title=f"Page {page_num + 1}",
+                cssversion=cssversion,
+                header=header_html,
+                main=main_content,
+                footer=footer_html,
+                extrahead="",
+                extrafoot=""
             )
             
             # Save file
@@ -1336,26 +1064,45 @@ class PlushForumsConverter:
         with open(self.output_path / "assets" / "js" / "search-data.js", 'w', encoding='utf-8') as f:
             f.write(search_js_content)
         
-        # Read template
-        template_path = Path(__file__).parent / "templates" / "search.html"
-        with open(template_path, 'r', encoding='utf-8') as f:
-            search_html = f.read()
-        
+        # Load layout and content templates
+        layout_template = self.load_template('layout.html')
+        content_template = self.load_template('search.html')
+
+        cssversion = self.get_cssversion()
         header_html = self.load_template('header.html')
         footer_html = self.load_template('footer.html')
 
-        css_version = self.get_css_version()
-        search_html = search_html.replace('{css_version}', str(css_version))
-        search_html = search_html.replace('{header_html}', str(header_html))
-        search_html = search_html.replace('{footer_html}', str(footer_html))
+        # Render content first
+        main_content = content_template.format()
+
+        # Prepare extrafoot with scripts
+        extrafoot = f"""
+        <script src="/assets/js/categories-data.js?v={cssversion}"></script>
+        <script src="/assets/js/search-data.js?v={cssversion}"></script>
+        <script src="/assets/js/search.js?v={cssversion}"></script>
+        """
+
+        # Then render layout with content
+        html_content = layout_template.format(
+            title="Search",
+            cssversion=cssversion,
+            header=header_html,
+            main=main_content,
+            footer=footer_html,
+            extrahead="",
+            extrafoot=extrafoot
+        )
 
         with open(self.output_path / "search.html", 'w', encoding='utf-8') as f:
-            f.write(search_html)
+            f.write(html_content)
     
 
     def convert(self, html_only=False):
         """Main conversion method with optional html_only mode"""
         print("Starting conversion...")
+
+        if html_only is None:
+            html_only = self.config['html_only_mode']
         
         if not html_only:
             # Load member data first
@@ -1429,6 +1176,8 @@ class PlushForumsConverter:
         if not html_only:
             print("Generating user posts data...")
             self.generate_user_posts_data(discussions_meta)
+            self.generate_user_search_index(discussions_meta)  # Add this
+            self.generate_user_data_chunks(discussions_meta)   # Add this            
         else:
             print("Skipping user posts data generation in html-only mode...")
         
@@ -1500,22 +1249,31 @@ class PlushForumsConverter:
             return False
 
 def main():
-    current_dir = Path(__file__).parent
-    EXPORT_PATH = Path(__file__).parent.parent / "exports" 
-    OUTPUT_PATH = Path(__file__).parent.parent / "build" / "static_archive"
-    
-    print(f"Current directory: {current_dir}")
-    print(f"Looking for export data in: {EXPORT_PATH}")
-    print(f"Will output to: {OUTPUT_PATH}")
-    
-    converter = PlushForumsConverter(EXPORT_PATH, OUTPUT_PATH)
-
-    # Simple argument check for html-only mode
     import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "html-only":
-        converter.convert(html_only=True)
-    else:
-        converter.convert(html_only=False)
+    
+    # Allow custom config path
+    config_path = None
+    html_only = False
+    
+    # Parse command line arguments
+    for arg in sys.argv[1:]:
+        if arg == "html-only":
+            html_only = True
+        elif arg.endswith('.json'):
+            config_path = arg
+        elif arg == "--help":
+            print("Usage: python convert_forum.py [html-only] [config.json]")
+            return
+    
+    current_dir = Path(__file__).parent
+    
+    # Use provided config or default
+    if config_path is None:
+        config_path = current_dir / "config.json"
+    
+    converter = PlushForumsConverter(config_path)
+    converter.convert(html_only=html_only)
+
 
 if __name__ == "__main__":
     main()
