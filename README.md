@@ -30,13 +30,13 @@ When TPF moved from Plush Forums to Discourse in 2026, this project ensured that
 - SEO-optimized static HTML output
 
 ## 🏗 Architecture
-Raw Plush Forums JSON Export
-↓
-Custom Python Parser & Converter
-↓
-Optimized Static HTML + Search Indexes
-↓
-Deployable Archive Website
+Raw Plush Forums JSON Export  
+↓  
+Custom Python Parser & Converter  
+↓  
+Optimized Static HTML + Search Indexes  
+↓  
+Deployable Archive Website  
 
 ## 📊 Scale & Performance
 - 15,000+ users with post histories
