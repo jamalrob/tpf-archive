@@ -38,11 +38,4 @@ Optimized Static HTML + Search Indexes
 ↓  
 Deployable Archive Website  
 
-## 📊 Scale & Performance
-- 15,000+ users with post histories
-- 150,000+ comments across all discussions
-- Search performance: <100ms for any user lookup
-- Build time: ~15 minutes for full site generation
-- Output: 100% static HTML/CSS/JS
-
 *This archive preserves the philosophical discussions from [The Philosophy Forum](https://thephilosophyforum.com) between 2015-2026 during its Plush Forums era.*
