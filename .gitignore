@@ -1,7 +1,9 @@
 /exports/
 /build/
 /dm-converter/dm_output/
-notes.txt
+notes.md
+.env
+*.env
 
 /converter/__pycache__/
 /converter/*.pyc
