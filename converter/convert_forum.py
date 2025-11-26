@@ -35,6 +35,40 @@ class PlushForumsConverter:
         print(f"Output path: {self.output_path}")
 
 
+    def generate_comments_pagination_html(self, disc_id, slug, current_page, total_pages):
+        """Generate pagination HTML for comments - follows same pattern as homepage"""
+        if total_pages <= 1:
+            return ""
+        
+        def page_url(page):
+            if page == 1:
+                return f"/discussions/{disc_id}-{slug}.html"
+            else:
+                return f"/discussions/{disc_id}-{slug}-page-{page}.html"
+        
+        pagination_html = '<div class="pagination comments-pagination">'
+        
+        # Previous button
+        if current_page > 1:
+            prev_url = page_url(current_page - 1)
+            pagination_html += f'<a href="{prev_url}" class="pagination-arrow">← Previous</a> '
+        else:
+            pagination_html += '<span class="pagination-arrow disabled">← Previous</span> '
+        
+        # Page numbers
+        pagination_html += f'<span class="page-info">Page {current_page} of {total_pages}</span>'
+        
+        # Next button
+        if current_page < total_pages:
+            next_url = page_url(current_page + 1)
+            pagination_html += f' <a href="{next_url}" class="pagination-arrow">Next →</a>'
+        else:
+            pagination_html += ' <span class="pagination-arrow disabled">Next →</span>'
+        
+        pagination_html += '</div>'
+        return pagination_html
+
+
     def generate_user_search_index(self, discussions_meta):
         """Generate a lightweight search index for fast username lookup"""
         print("Building user search index...")
@@ -646,14 +680,24 @@ class PlushForumsConverter:
         return slug[:50]
     
 
-    def generate_discussion_page(self, discussion):
+    def generate_discussion_page(self, discussion, page_num=1):
+        """Generate discussion page with paginated comments"""
         disc_id = discussion['DiscussionID']
         slug = self.generate_slug(discussion['Name'])
         
         # Get comments for this discussion
         discussion_comments = self.comments.get(disc_id, [])
         
-        # Convert discussion body with enhanced BBCode
+        # Paginate comments
+        comments_per_page = self.config.get('comments_per_page', 100)
+        total_pages = (len(discussion_comments) + comments_per_page - 1) // comments_per_page
+        page_num = max(1, min(page_num, total_pages))  # Clamp to valid range
+        
+        start_idx = (page_num - 1) * comments_per_page
+        end_idx = start_idx + comments_per_page
+        page_comments = discussion_comments[start_idx:end_idx]
+        
+        # Convert discussion body
         discussion_body = self.convert_plush_bbcode(discussion['Body'], disc_id)
         
         # Get author username
@@ -662,7 +706,7 @@ class PlushForumsConverter:
         
         # Generate comments HTML
         comments_html = ""
-        for comment in discussion_comments:
+        for comment in page_comments:
             comment_body = self.convert_plush_bbcode(comment['Body'], disc_id)
             comment_author_name = self.get_username(comment['InsertUserID'])
             
@@ -679,16 +723,18 @@ class PlushForumsConverter:
                     </div>
                 </div>"""
         
-        # Load layout and content templates
+        # Generate pagination using your existing pattern
+        pagination_html = self.generate_comments_pagination_html(disc_id, slug, page_num, total_pages)
+        
+        # Load templates and render (your existing code)
         layout_template = self.load_template('layout.html')
         content_template = self.load_template('discussion.html')
 
         cssversion = self.get_cssversion()
-
         header_html = self.load_template('header.html')
         footer_html = self.load_template('footer.html')
 
-        # Render content first
+        # Render content
         main_content = content_template.format(
             discussion_title=html.escape(discussion['Name']),
             author_name=html.escape(author_name),
@@ -696,12 +742,13 @@ class PlushForumsConverter:
             view_count=discussion['CountViews'],
             comment_count=len(discussion_comments),
             discussion_body=discussion_body,
-            comments_html=comments_html
+            comments_html=comments_html,
+            pagination_html=pagination_html
         )
 
         # Then render layout with content
         html_content = layout_template.format(
-            title=html.escape(discussion['Name']),
+            title=html.escape(discussion['Name']) + (f" - Page {page_num}" if page_num > 1 else ""),
             cssversion=cssversion,
             extrahead="",
             extrafoot="",
@@ -710,8 +757,12 @@ class PlushForumsConverter:
             footer=footer_html
         )
         
-        # Write file
-        output_file = self.output_path / "discussions" / f"{disc_id}-{slug}.html"
+        # Write file with appropriate naming
+        if page_num == 1:
+            output_file = self.output_path / "discussions" / f"{disc_id}-{slug}.html"
+        else:
+            output_file = self.output_path / "discussions" / f"{disc_id}-{slug}-page-{page_num}.html"
+        
         output_file.parent.mkdir(parents=True, exist_ok=True)
         
         with open(output_file, 'w', encoding='utf-8') as f:
@@ -726,7 +777,8 @@ class PlushForumsConverter:
             'comment_count': len(discussion_comments),
             'author_id': author_id,
             'category_id': discussion.get('CategoryID'),
-            'category_name': self.categories.get(discussion.get('CategoryID'), {}).get('Name', 'Uncategorized')
+            'category_name': self.categories.get(discussion.get('CategoryID'), {}).get('Name', 'Uncategorized'),
+            'total_pages': total_pages
         }
     
     def generate_user_posts_data(self, discussions_meta):
@@ -1133,8 +1185,14 @@ class PlushForumsConverter:
             discussions_meta = []
             for disc_id, discussion in self.discussions.items():
                 print(f"Generating HTML for discussion: {discussion['Name']}")
-                meta = self.generate_discussion_page(discussion)
+                # Generate first page and get metadata
+                meta = self.generate_discussion_page(discussion, page_num=1)
                 discussions_meta.append(meta)
+                
+                # Generate additional pages if needed
+                if meta['total_pages'] > 1:
+                    for page_num in range(2, meta['total_pages'] + 1):
+                        self.generate_discussion_page(discussion, page_num=page_num)
                 
         else:
             print("HTML-only mode: loading previously processed data...")
