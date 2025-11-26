@@ -1,12 +1,10 @@
 # The Philosophy Forum Archive Generator
 
-Currently live at [https://tpfarchive.com](https://tpfarchive.com).
-
-A high-performance static site generator that transforms Plush Forums data exports into a permanent, searchable read-only archive.
+The custom-made static site generator for [https://tpfarchive.com](https://tpfarchive.com), it transforms a Plush Forums data export into a permanent, searchable read-only archive.
 
 ## 🚀 Overview
 
-This custom-built system converts the historical data from **The Philosophy Forum (TPF)** (2015-2026) into a fully functional static website, preserving over 15,000 user discussions and 150,000+ comments after the forum's migration to Discourse.
+This custom-built system converts the historical data from [The Philosophy Forum (TPF)](https://thephilosophyforum.com) (2015-2026) into a fully functional static website, preserving over 15,000 user discussions and 150,000+ comments after the forum's migration to Discourse.
 
 ## 💡 Why This Exists
 
