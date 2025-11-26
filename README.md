@@ -1,5 +1,7 @@
 # The Philosophy Forum Archive Generator
 
+Currently live at [https://tpfarchive.com](https://tpfarchive.com).
+
 A high-performance static site generator that transforms Plush Forums data exports into a permanent, searchable read-only archive.
 
 ## 🚀 Overview
