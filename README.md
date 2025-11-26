@@ -8,7 +8,7 @@ This custom-built system converts the historical data from [The Philosophy Forum
 
 ## 💡 Why This Exists
 
-When TPF moved from Plush Forums to Discourse in 2026, this project ensured that:
+When TPF moved from Plush Forums to Discourse in 2026---and for a few reasons decided not to migrate the data---this project ensured that:
 - 10+ years of philosophical discussions remain accessible
 - User contributions are permanently preserved
 - The archive remains fully searchable and navigable
