@@ -2,6 +2,7 @@
   "export_path": "../exports",
   "output_path": "../build/static_archive",
   "excluded_categories": [21, 22],
+  "excluded_users": ["Lionino"],
   "comments_per_page": 1000,
   "homepage_page_size": 50,
   "html_only_mode": false

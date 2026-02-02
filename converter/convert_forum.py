@@ -19,6 +19,12 @@ class PlushForumsConverter:
         # Load config directly - will crash if file missing (good for visibility)
         with open(config_path, 'r', encoding='utf-8') as f:
             self.config = json.load(f)
+
+        self.excluded_users = set(
+            username.lower()
+            for username in self.config.get("excluded_users", [])
+        )
+    
         
         self.export_path = Path(self.config['export_path']).resolve()
         self.output_path = Path(self.config['output_path']).resolve()
@@ -341,15 +347,31 @@ class PlushForumsConverter:
                 print(f"  UserID {user_id} -> '{username}'")
         else:
             print("WARNING: No members were loaded!")
-    
+
+    def get_display_username(self, username):
+        """Apply excluded-user rules to a raw username string"""
+        if not username:
+            return username
+
+        if username.lower() in self.excluded_users:
+            return "Deleted user"
+
+        return username
+
+
     def get_username(self, user_id):
-        """Get username from user ID, fallback to 'User {id}' if not found"""
-        if user_id in self.members:
-            return self.members[user_id]
-        else:
+        """Get username from user ID, applying excluded-user replacement"""
+        username = self.members.get(user_id)
+
+        if not username:
             print(f"DEBUG: User ID {user_id} not found in members data")
-            print(f"DEBUG: Available user IDs: {list(self.members.keys())[:10]}...")  # Show first 10
             return f"User {user_id}"
+
+        if username.lower() in self.excluded_users:
+            return "Deleted user"
+
+        return username
+
     
     def load_data(self):
         """Load all discussions and comments"""
@@ -448,6 +470,8 @@ class PlushForumsConverter:
         """Convert [reply="UserName;ID"] tags to links - handles both comment and discussion IDs"""
         username = match.group(1)
         target_id = match.group(2)
+
+        username = self.get_display_username(username)
         
         # Check if it's a discussion ID (starts with 'd') or comment ID (numeric)
         if target_id.startswith('d'):
@@ -476,6 +500,8 @@ class PlushForumsConverter:
         username = match.group(1)
         target_id = match.group(2)
         quoted_content = match.group(3)
+
+        username = self.get_display_username(username)
         
         # Check if it's a discussion ID (starts with 'd') or comment ID (numeric)
         if target_id.startswith('d'):
@@ -606,19 +632,25 @@ class PlushForumsConverter:
         return text
     
     def _convert_user_mention(self, match):
-        """Convert @"username" to clickable mention if user exists"""
+        """Convert @"username" to clickable mention if user exists, respecting excluded_users"""
         username = match.group(1)
+
+        # If this username is excluded, show replacement and do NOT link
+        if username.lower() in self.excluded_users:
+            return '<span class="user-mention deleted">@Deleted user</span>'
+
         # Find user ID by username
         user_id = None
         for uid, name in self.members.items():
             if name == username:
                 user_id = uid
                 break
-        
+
         if user_id:
             return f'<a href="/members/{user_id}.html" class="user-mention">@{username}</a>'
         else:
             return f'<span class="user-mention unknown">@{username}</span>'
+
         
     def _convert_ordered_list(self, match):
         """Convert ordered list BBCode to HTML"""
