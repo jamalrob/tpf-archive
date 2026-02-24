@@ -2,7 +2,7 @@
 
 A custom static site generator for transforming a Plush Forums data export into a permanent, searchable, read-only archive of The Philosophy Forum.
 
-This project powers https://tpfarchive.com.
+This project powers https://archive.thephilosophyforum.com.
 
 ## Goals
 

@@ -127,6 +127,10 @@ nav a:hover {
     margin: 0 auto; 
 }
 
+.discussion-container.about p {
+    margin-bottom: 20px;
+}
+
 .discussion-header h1 { 
     margin-bottom: 10px; 
     color: #222;
@@ -489,7 +493,7 @@ header nav a:hover {
 main {
     max-width: 800px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 0 20px 20px;
 }
 
 /* Desktop-only: Side-by-side layout for search */
@@ -785,4 +789,52 @@ main {
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+.tpf-archive-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  margin: 40px auto;
+  padding: 14px 18px;
+
+  border-radius: 12px;
+  background: moccasin;
+  border: 2px solid #999;
+
+  max-width: 800px;
+  font-size: 1.2rem;
+  line-height: 1.4;
+}
+
+.tpf-archive-banner__text {
+  flex: 1 1 320px;
+}
+
+.tpf-archive-banner__button {
+  flex: 0 0 auto;
+  text-decoration: none;
+
+  padding: 8px 14px;
+  border-radius: 4px;
+
+  background: #2b6cb0;
+  color: #fff;
+  border: 1px solid #255ea3;
+
+  font-size: 0.9rem;
+  font-weight: 600;
+
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+.tpf-archive-banner__button:hover {
+  background: #255ea3;
+}
+
+.tpf-archive-banner__button:active {
+  transform: translateY(1px);
 }

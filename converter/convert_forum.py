@@ -10,6 +10,7 @@ import csv
 from datetime import datetime
 from pathlib import Path
 import html
+from urllib.parse import urljoin
 
 class PlushForumsConverter:
     def __init__(self, config_path=None):
@@ -28,6 +29,7 @@ class PlushForumsConverter:
         
         self.export_path = Path(self.config['export_path']).resolve()
         self.output_path = Path(self.config['output_path']).resolve()
+        self.site_url = self.config["site_url"].rstrip("/") + "/"
         
         # Initialize other attributes
         self.discussions = {}
@@ -709,7 +711,7 @@ class PlushForumsConverter:
         """Generate URL slug from discussion title"""
         slug = re.sub(r'[^\w\s-]', '', title.lower())
         slug = re.sub(r'[-\s]+', '-', slug)
-        return slug[:50]
+        return slug[:200].rstrip("-")
     
 
     def generate_discussion_page(self, discussion, page_num=1):
@@ -778,12 +780,18 @@ class PlushForumsConverter:
             pagination_html=pagination_html
         )
 
+        if page_num == 1:
+            pagepath = "discussions/" + f"{disc_id}-{slug}.html"
+        else:
+            pagepath = "discussions/" + f"{disc_id}-{slug}-page-{page_num}.html"
+
         # Then render layout with content
         html_content = layout_template.format(
             title=html.escape(discussion['Name']) + (f" - Page {page_num}" if page_num > 1 else ""),
             cssversion=cssversion,
             extrahead="",
             extrafoot="",
+            canonicalpath=f"{self.site_url}" + pagepath,
             header=header_html,
             main=main_content,
             footer=footer_html
@@ -794,7 +802,7 @@ class PlushForumsConverter:
             output_file = self.output_path / "discussions" / f"{disc_id}-{slug}.html"
         else:
             output_file = self.output_path / "discussions" / f"{disc_id}-{slug}-page-{page_num}.html"
-        
+
         output_file.parent.mkdir(parents=True, exist_ok=True)
         
         with open(output_file, 'w', encoding='utf-8') as f:
@@ -950,6 +958,7 @@ class PlushForumsConverter:
             header=header_html,
             main=main_content,
             footer=footer_html,
+            canonicalpath=f"{self.site_url}about.html",
             extrahead="",
             extrafoot=""
         )
@@ -959,6 +968,39 @@ class PlushForumsConverter:
             f.write(html_content)
         
         print(f"Generated About page: {output_file}")
+
+
+    def generate_404_page(self):
+        """Generate 404 page for the forum export"""
+        # Load layout and content templates
+        layout_template = self.load_template('layout.html')
+        content_template = self.load_template('404.html')
+
+        cssversion = self.get_cssversion()
+        header_html = self.load_template('header.html')
+        footer_html = self.load_template('footer.html')
+
+        # Render content first
+        main_content = content_template.format()
+
+        # Then render layout with content
+        html_content = layout_template.format(
+            title="404 Page Not Found",
+            cssversion=cssversion,
+            header=header_html,
+            main=main_content,
+            footer=footer_html,
+            canonicalpath=f"{self.site_url}404.html",
+            extrahead="",
+            extrafoot=""
+        )
+        
+        output_file = self.output_path / "404.html"
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        
+        print(f"Generated 404 page: {output_file}")
+
 
 
     def generate_your_posts_page(self, discussions_meta):
@@ -989,6 +1031,7 @@ class PlushForumsConverter:
             header=header_html,
             main=main_content,
             footer=footer_html,
+            canonicalpath = f"{self.site_url}your-posts.html",
             extrahead="",
             extrafoot=extrafoot
         )
@@ -1077,6 +1120,7 @@ class PlushForumsConverter:
                 header=header_html,
                 main=main_content,
                 footer=footer_html,
+                canonicalpath = f"{self.site_url}",
                 extrahead="",
                 extrafoot=""
             )
@@ -1173,6 +1217,7 @@ class PlushForumsConverter:
             header=header_html,
             main=main_content,
             footer=footer_html,
+            canonicalpath = f"{self.site_url}search.html",
             extrahead="",
             extrafoot=extrafoot
         )
@@ -1272,11 +1317,15 @@ class PlushForumsConverter:
             print("Skipping user posts data generation in html-only mode...")
         
         self.generate_about_page()
+        self.generate_404_page()
         self.generate_your_posts_page(discussions_meta)
 
         # Generate indexes (these are quick to regenerate)
         self.generate_homepage(discussions_meta)
         self.generate_search_page(discussions_meta)
+
+        count = self.write_sitemap(self.site_url, self.output_path)
+        print(f"sitemap.xml written with {count} URLs at {self.output_path / 'sitemap.xml'}")        
 
         print(f"Conversion complete! Output in: {self.output_path}")
         print(f"Processed {len(discussions_meta)} discussions")
@@ -1337,6 +1386,32 @@ class PlushForumsConverter:
         except Exception as e:
             print(f"Error loading processed data: {e}")
             return False
+
+    def write_sitemap(self, site_url: str, root_dir: str | Path) -> int:
+        site_url = site_url.rstrip("/")
+        root = Path(root_dir)
+
+        def url_for(path: Path) -> str:
+            rel = path.relative_to(root).as_posix()
+            if rel == "index.html":
+                return f"{site_url}/"
+            if rel.endswith("/index.html"):
+                return f"{site_url}/{rel[:-10]}/"
+            return f"{site_url}/{rel}"
+
+        html_files = sorted(root.rglob("*.html"))
+
+        lines = ['<?xml version="1.0" encoding="UTF-8"?>',
+                '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+        for f in html_files:
+            lines.append("  <url>")
+            lines.append(f"    <loc>{url_for(f)}</loc>")
+            lines.append("  </url>")
+        lines.append("</urlset>")
+
+        (root / "sitemap.xml").write_text("\n".join(lines), encoding="utf-8")
+        return len(html_files)
+
 
 def main():
     import sys
