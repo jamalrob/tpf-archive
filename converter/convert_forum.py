@@ -785,13 +785,19 @@ class PlushForumsConverter:
         else:
             pagepath = "discussions/" + f"{disc_id}-{slug}-page-{page_num}.html"
 
+        catid = discussion.get('CategoryID')
+        robot_block=""
+        if catid in self.config["noindex_categories"]:
+            robot_block = '<meta name="robots" content="noindex, nofollow">'
+
         # Then render layout with content
         html_content = layout_template.format(
             title=html.escape(discussion['Name']) + (f" - Page {page_num}" if page_num > 1 else ""),
             cssversion=cssversion,
             extrahead="",
             extrafoot="",
-            canonicalpath=f"{self.site_url}" + pagepath,
+            canonical_url=f"{self.site_url}" + pagepath,
+            robot_block=robot_block,
             header=header_html,
             main=main_content,
             footer=footer_html
@@ -958,7 +964,8 @@ class PlushForumsConverter:
             header=header_html,
             main=main_content,
             footer=footer_html,
-            canonicalpath=f"{self.site_url}about.html",
+            canonical_url=f"{self.site_url}about.html",
+            robot_block="",
             extrahead="",
             extrafoot=""
         )
@@ -990,7 +997,8 @@ class PlushForumsConverter:
             header=header_html,
             main=main_content,
             footer=footer_html,
-            canonicalpath=f"{self.site_url}404.html",
+            canonical_url=f"{self.site_url}404.html",
+            robot_block="",
             extrahead="",
             extrafoot=""
         )
@@ -1031,7 +1039,8 @@ class PlushForumsConverter:
             header=header_html,
             main=main_content,
             footer=footer_html,
-            canonicalpath = f"{self.site_url}your-posts.html",
+            canonical_url = f"{self.site_url}your-posts.html",
+            robot_block="",
             extrahead="",
             extrafoot=extrafoot
         )
@@ -1120,7 +1129,8 @@ class PlushForumsConverter:
                 header=header_html,
                 main=main_content,
                 footer=footer_html,
-                canonicalpath = f"{self.site_url}",
+                canonical_url = f"{self.site_url}",
+                robot_block="",
                 extrahead="",
                 extrafoot=""
             )
@@ -1217,7 +1227,8 @@ class PlushForumsConverter:
             header=header_html,
             main=main_content,
             footer=footer_html,
-            canonicalpath = f"{self.site_url}search.html",
+            canonical_url = f"{self.site_url}search.html",
+            robot_block="",
             extrahead="",
             extrafoot=extrafoot
         )
@@ -1387,6 +1398,7 @@ class PlushForumsConverter:
             print(f"Error loading processed data: {e}")
             return False
 
+
     def write_sitemap(self, site_url: str, root_dir: str | Path) -> int:
         site_url = site_url.rstrip("/")
         root = Path(root_dir)
@@ -1399,18 +1411,33 @@ class PlushForumsConverter:
                 return f"{site_url}/{rel[:-10]}/"
             return f"{site_url}/{rel}"
 
+        def is_noindex(html_path: Path) -> bool:
+            # cheap/robust enough for your generator output
+            s = html_path.read_text(encoding="utf-8", errors="ignore").lower()
+            return (
+                '<meta name="robots"' in s and "noindex" in s
+            ) or (
+                '<meta name="googlebot"' in s and "noindex" in s
+            )
+
         html_files = sorted(root.rglob("*.html"))
 
         lines = ['<?xml version="1.0" encoding="UTF-8"?>',
                 '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+
+        included = 0
         for f in html_files:
+            if is_noindex(f):
+                continue
             lines.append("  <url>")
             lines.append(f"    <loc>{url_for(f)}</loc>")
             lines.append("  </url>")
+            included += 1
+
         lines.append("</urlset>")
 
         (root / "sitemap.xml").write_text("\n".join(lines), encoding="utf-8")
-        return len(html_files)
+        return included
 
 
 def main():

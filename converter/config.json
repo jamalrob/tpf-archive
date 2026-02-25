@@ -6,5 +6,6 @@
   "comments_per_page": 1000,
   "homepage_page_size": 50,
   "html_only_mode": false,
-  "site_url": "https://archive.thephilosophyforum.com"
+  "site_url": "https://archive.thephilosophyforum.com",
+  "noindex_categories": [40,37,38,41,42,46,48,49,50,54]
 }

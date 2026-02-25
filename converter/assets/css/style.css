@@ -825,7 +825,7 @@ main {
   color: #fff;
   border: 1px solid #255ea3;
 
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
 
   transition: background 0.15s ease, transform 0.05s ease;
