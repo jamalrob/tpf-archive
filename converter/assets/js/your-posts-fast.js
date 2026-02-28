@@ -79,7 +79,7 @@ class FastUserSearch {
     async loadChunk(chunkNum) {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = `/assets/user-chunks/chunk-${chunkNum}.js`;
+            script.src = `/assets/user-chunks/chunk-${chunkNum}.js?v=${window.BUILD_VERSION}`;
             script.onload = () => {
                 this.loadedChunks.add(chunkNum);
                 resolve();

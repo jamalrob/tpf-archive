@@ -575,6 +575,10 @@ main {
         width: 100%;
         font-size: 16px;
     }
+
+    .tpf-archive-banner {
+        max-width: 90% !important;
+    }
 }
 
 @media (max-width: 480px) {

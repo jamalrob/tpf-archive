@@ -14,6 +14,11 @@ from urllib.parse import urljoin
 
 class PlushForumsConverter:
     def __init__(self, config_path=None):
+
+        #self._build_version = int(time.time())
+        import time  # if not already
+        self.buildversion = str(int(time.time()))
+
         if config_path is None:
             config_path = Path(__file__).parent / "config.json"
         
@@ -243,7 +248,6 @@ class PlushForumsConverter:
         # Store in cache for next time
         self._template_cache[template_name] = template
         return template
-
 
     def get_cssversion(self):
         """Get CSS version (cached per conversion run)"""
@@ -794,6 +798,7 @@ class PlushForumsConverter:
         html_content = layout_template.format(
             title=html.escape(discussion['Name']) + (f" - Page {page_num}" if page_num > 1 else ""),
             cssversion=cssversion,
+            buildversion=self.buildversion,
             extrahead="",
             extrafoot="",
             canonical_url=f"{self.site_url}" + pagepath,
@@ -910,6 +915,15 @@ class PlushForumsConverter:
         
         print(f"Written user lookup to: {lookup_file}")
         
+        # DEBUG: what dates are we actually seeing here?
+        all_dates = []
+        for u in user_posts_map.values():
+            for c in u["comments"]:
+                all_dates.append(c["date"])
+
+        print("DEBUG newest comment date in user_posts_map:", max(all_dates) if all_dates else "NONE")
+        # /DEBUG
+
         # Write individual user data files
         user_data_dir = self.output_path / "assets" / "user-data"
         user_data_dir.mkdir(parents=True, exist_ok=True)
@@ -961,6 +975,7 @@ class PlushForumsConverter:
         html_content = layout_template.format(
             title="About",
             cssversion=cssversion,
+            buildversion=self.buildversion,
             header=header_html,
             main=main_content,
             footer=footer_html,
@@ -994,6 +1009,7 @@ class PlushForumsConverter:
         html_content = layout_template.format(
             title="404 Page Not Found",
             cssversion=cssversion,
+            buildversion=self.buildversion,
             header=header_html,
             main=main_content,
             footer=footer_html,
@@ -1027,15 +1043,16 @@ class PlushForumsConverter:
 
         # Prepare extrafoot with both scripts
         extrafoot = f"""
-        <script src="/assets/js/user-search-index.js?v={cssversion}"></script>
-        <script src="/assets/js/user-chunk-mapping.js?v={cssversion}"></script>
-        <script src="/assets/js/your-posts-fast.js?v={cssversion}"></script>
+        <script src="/assets/js/user-search-index.js?v={self.buildversion}"></script>
+        <script src="/assets/js/user-chunk-mapping.js?v={self.buildversion}"></script>
+        <script src="/assets/js/your-posts-fast.js?v={self.buildversion}"></script>
         """
 
         # Then render layout with content
         html_content = layout_template.format(
             title="Your Posts",
             cssversion=cssversion,
+            buildversion=self.buildversion,
             header=header_html,
             main=main_content,
             footer=footer_html,
@@ -1126,10 +1143,12 @@ class PlushForumsConverter:
             html_content = layout_template.format(
                 title=f"Page {page_num + 1}",
                 cssversion=cssversion,
+                buildversion=self.buildversion,
                 header=header_html,
                 main=main_content,
                 footer=footer_html,
-                canonical_url = f"{self.site_url}",
+                #canonical_url = f"{self.site_url}",
+                canonical_url = self.site_url + (f"/page-{page_num + 1}.html" if page_num else ""),
                 robot_block="",
                 extrahead="",
                 extrafoot=""
@@ -1215,15 +1234,16 @@ class PlushForumsConverter:
 
         # Prepare extrafoot with scripts
         extrafoot = f"""
-        <script src="/assets/js/categories-data.js?v={cssversion}"></script>
-        <script src="/assets/js/search-data.js?v={cssversion}"></script>
-        <script src="/assets/js/search.js?v={cssversion}"></script>
+        <script src="/assets/js/categories-data.js?v={self.buildversion}"></script>
+        <script src="/assets/js/search-data.js?v={self.buildversion}"></script>
+        <script src="/assets/js/search.js?v={self.buildversion}"></script>
         """
 
         # Then render layout with content
         html_content = layout_template.format(
             title="Search",
             cssversion=cssversion,
+            buildversion=self.buildversion,
             header=header_html,
             main=main_content,
             footer=footer_html,

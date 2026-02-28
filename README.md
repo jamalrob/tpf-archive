@@ -20,7 +20,7 @@ data was not migrated to the new platform.
 - user contributions are preserved in a stable, non-interactive form
 - the archive can be hosted and maintained with minimal ongoing cost
 
-The archive covers the Plush Forums era of TPF (October 2015 to January 2025).
+The archive covers the Plush Forums era of TPF (October 2015 to January 2026).
 
 ## Structure
 
