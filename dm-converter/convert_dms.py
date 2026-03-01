@@ -177,37 +177,55 @@ class PrivateMessageConverter:
         
         return text_content
 
-    def generate_user_dms(self, user_identifier):
-        """Generate all DM text files for a specific user"""
+    def resolve_user_id(self, user_identifier):
+        """Resolve a username or numeric ID to a user ID, or return None."""
+        if isinstance(user_identifier, int) or str(user_identifier).isdigit():
+            return int(user_identifier)
+        for uid, username in self.members.items():
+            if username.lower() == user_identifier.lower():
+                return uid
+        return None
+
+    def generate_user_dms(self, user_identifier, other_identifier=None):
+        """Generate all DM text files for a specific user, optionally filtered to conversations with a second user."""
         # Load all data
         self.load_member_data()
         self.load_conversation_data()
         self.load_message_data()
-        
+
         # Find user ID
-        user_id = None
-        if isinstance(user_identifier, int) or user_identifier.isdigit():
-            user_id = int(user_identifier)
-        else:
-            # Look up by username
-            for uid, username in self.members.items():
-                if username.lower() == user_identifier.lower():
-                    user_id = uid
-                    break
-        
+        user_id = self.resolve_user_id(user_identifier)
         if not user_id:
             print(f"ERROR: User '{user_identifier}' not found")
             return
-        
+
+        # Optionally find second user ID
+        other_id = None
+        if other_identifier is not None:
+            other_id = self.resolve_user_id(other_identifier)
+            if not other_id:
+                print(f"ERROR: User '{other_identifier}' not found")
+                return
+
         username = self.get_username(user_id)
         print(f"Generating DMs for {username} (ID: {user_id})")
-        
-        # Get user's conversations
+
+        # Get user's conversations, optionally filtered to those including other_id
         user_convos = self.get_user_conversations(user_id)
-        print(f"Found {len(user_convos)} conversations")
-        
+        if other_id is not None:
+            other_name = self.get_username(other_id)
+            user_convos = [c for c in user_convos if other_id in c.get('Contributors', [])]
+            print(f"Filtered to conversations with {other_name}: {len(user_convos)}")
+        else:
+            print(f"Found {len(user_convos)} conversations")
+
         # Create output directory
-        user_output_dir = self.output_path / f"user-{user_id}-{username.replace(' ', '_')}"
+        if other_id is not None:
+            other_name = self.get_username(other_id)
+            dir_name = f"user-{user_id}-{username.replace(' ', '_')}_with_{other_name.replace(' ', '_')}"
+        else:
+            dir_name = f"user-{user_id}-{username.replace(' ', '_')}"
+        user_output_dir = self.output_path / dir_name
         user_output_dir.mkdir(parents=True, exist_ok=True)
         
         # Generate conversation text files
@@ -230,11 +248,12 @@ class PrivateMessageConverter:
             print(f"Generated: {output_file}")
         
         # Generate master file with all conversations
-        self.generate_master_file(user_id, user_convos, user_output_dir, username)
+        other_name = self.get_username(other_id) if other_id else None
+        self.generate_master_file(user_id, user_convos, user_output_dir, username, other_name)
         
         print(f"Done! Generated {len(user_convos)} conversation files for {username}")
 
-    def generate_master_file(self, user_id, conversations, output_dir, username):
+    def generate_master_file(self, user_id, conversations, output_dir, username, other_name=None):
         """Generate a master file containing all conversations"""
         master_content = f"PRIVATE MESSAGES - {username}\n"
         master_content += "=" * 60 + "\n"
@@ -249,7 +268,11 @@ class PrivateMessageConverter:
             master_content += "\n" + "=" * 80 + "\n\n"
         
         # Save master file
-        master_file = output_dir / f"all_conversations_{username.replace(' ', '_')}.txt"
+        if other_name:
+            filename = f"all_conversations_{username.replace(' ', '_')}_with_{other_name.replace(' ', '_')}.txt"
+        else:
+            filename = f"all_conversations_{username.replace(' ', '_')}.txt"
+        master_file = output_dir / filename
         with open(master_file, 'w', encoding='utf-8') as f:
             f.write(master_content)
         
@@ -257,25 +280,25 @@ class PrivateMessageConverter:
 
 def main():
     import sys
-    
+
     if len(sys.argv) < 2:
-        print("Usage: python convert_dms.py <user_identifier> [output_path]")
-        print("  user_identifier: User ID (number) or username")
-        print("  output_path: Optional output directory (default: ./dm_output)")
+        print("Usage: python convert_dms.py <user> [other_user]")
+        print("  user:       User ID (number) or username")
+        print("  other_user: Optional second user to filter conversations to those between both users")
         return
-    
+
     user_identifier = sys.argv[1]
-    output_path = sys.argv[2] if len(sys.argv) > 2 else "./dm_output"
-    
+    other_identifier = sys.argv[2] if len(sys.argv) > 2 else None
+
     current_dir = Path(__file__).parent
     EXPORT_PATH = current_dir.parent / "exports"
-    OUTPUT_PATH = Path(output_path)
-    
+    OUTPUT_PATH = current_dir / "dm_output"
+
     print(f"Looking for export data in: {EXPORT_PATH}")
     print(f"Will output to: {OUTPUT_PATH}")
-    
+
     converter = PrivateMessageConverter(EXPORT_PATH, OUTPUT_PATH)
-    converter.generate_user_dms(user_identifier)
+    converter.generate_user_dms(user_identifier, other_identifier)
 
 if __name__ == "__main__":
     main()
