@@ -146,20 +146,27 @@ class PlushForumsConverter:
                 'excerpt': self.make_excerpt(discussion.get('Body', ''), 200)
             })
         
-        # Build comments by user (O(n) instead of O(n×m))  
+        # Build comments by user (O(n) instead of O(n×m))
+        comments_per_page = self.config.get('comments_per_page', 1000)
         for disc_id, comments in self.comments.items():
-            for comment in comments:
+            for idx, comment in enumerate(comments):
                 user_id = comment['InsertUserID']
                 if user_id not in user_comments:
                     user_comments[user_id] = []
-                
+
                 disc_title = self.discussions[disc_id]['Name'] if disc_id in self.discussions else "Unknown Discussion"
+                slug = self.generate_slug(disc_title)
+                page = (idx // comments_per_page) + 1
+                if page == 1:
+                    url = f"/discussions/{disc_id}-{slug}.html#comment-{comment['CommentID']}"
+                else:
+                    url = f"/discussions/{disc_id}-{slug}-page-{page}.html#comment-{comment['CommentID']}"
                 user_comments[user_id].append({
                     'id': comment['CommentID'],
                     'discussion_id': disc_id,
                     'discussion_title': disc_title,
                     'date': comment['DateInserted'],
-                    'url': f"/discussions/{disc_id}-{self.generate_slug(disc_title)}.html#comment-{comment['CommentID']}",
+                    'url': url,
                     'excerpt': self.make_excerpt(comment.get('Body', ''), 150)
                 })
         
