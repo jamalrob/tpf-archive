@@ -319,6 +319,16 @@ footer {
     margin-top: 2px;
 }
 
+.search-tip {
+    margin-top: 2rem;
+    padding: 0.9rem 1.1rem;
+    background: #f5f7fa;
+    border-left: 3px solid #aaa;
+    font-size: 0.9em;
+    color: #444;
+    line-height: 1.6;
+}
+
 .search-stats {
     margin: 10px 0;
     color: #666;
