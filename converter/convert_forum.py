@@ -143,7 +143,7 @@ class PlushForumsConverter:
                 'title': disc['title'], 
                 'date': disc['date'],
                 'url': disc['url'],
-                'excerpt': discussion.get('Body', '')[:200] + '...' if len(discussion.get('Body', '')) > 200 else discussion.get('Body', '')
+                'excerpt': self.make_excerpt(discussion.get('Body', ''), 200)
             })
         
         # Build comments by user (O(n) instead of O(n×m))  
@@ -160,7 +160,7 @@ class PlushForumsConverter:
                     'discussion_title': disc_title,
                     'date': comment['DateInserted'],
                     'url': f"/discussions/{disc_id}-{self.generate_slug(disc_title)}.html#comment-{comment['CommentID']}",
-                    'excerpt': comment.get('Body', '')[:150] + '...' if len(comment.get('Body', '')) > 150 else comment.get('Body', '')
+                    'excerpt': self.make_excerpt(comment.get('Body', ''), 150)
                 })
         
         # Now chunk users (this part is fast)
@@ -200,6 +200,22 @@ class PlushForumsConverter:
         
         print(f"✅ Created {len(user_chunks)} user mappings across {(len(all_users) + chunk_size - 1) // chunk_size} chunks")
 
+
+    def make_excerpt(self, text, length):
+        """Strip BBCode and truncate text for use as an excerpt."""
+        if not text:
+            return ''
+        # Remove quote blocks entirely (including their quoted content)
+        text = re.sub(r'\[quote[^\]]*\].*?\[/quote\]', '', text, flags=re.DOTALL | re.IGNORECASE)
+        # Remove reply tags
+        text = re.sub(r'\[reply[^\]]*\]', '', text, flags=re.IGNORECASE)
+        # Remove all remaining BBCode tags
+        text = re.sub(r'\[[^\]]+\]', '', text)
+        # Normalise whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        if len(text) > length:
+            return text[:length] + '...'
+        return text
 
     def fix_windows_1252_encoding(self, text):
         """Fix Windows-1252 encoded characters in JSON data"""
