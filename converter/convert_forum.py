@@ -612,7 +612,11 @@ class PlushForumsConverter:
             r'<blockquote class="simple-quote">\1</blockquote>',
             text, flags=re.DOTALL | re.IGNORECASE
         )
-        
+
+        # Clean up any unclosed or orphaned quote tags left unmatched
+        text = re.sub(r'\[quote[^\]]*\]', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'\[/quote\]', '', text, flags=re.IGNORECASE)
+
         # Step 4: Convert user mentions @"UserName" with proper links
         text = re.sub(
             r'@"([^"]+)"',
