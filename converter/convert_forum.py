@@ -589,28 +589,28 @@ class PlushForumsConverter:
         text = re.sub(
             r'\[quote="([^";]+);([^"]+)"\](.*?)\[/quote\]',
             lambda match: self._convert_complex_quote(match, current_discussion_id),
-            text, flags=re.DOTALL
+            text, flags=re.DOTALL | re.IGNORECASE
         )
-        
+
         # [quote="UserName"]...[/quote] (without ID)
         text = re.sub(
             r'\[quote="([^"]+)"\](.*?)\[/quote\]',
             r'<blockquote class="user-quote"><cite>\1:</cite>\2</blockquote>',
-            text, flags=re.DOTALL
+            text, flags=re.DOTALL | re.IGNORECASE
         )
-        
+
         # [quote=label]...[/quote] (unquoted attribute, e.g. manual book/source quotes)
         text = re.sub(
             r'\[quote=([^\]]+)\](.*?)\[/quote\]',
             r'<blockquote class="user-quote"><cite>\1:</cite>\2</blockquote>',
-            text, flags=re.DOTALL
+            text, flags=re.DOTALL | re.IGNORECASE
         )
 
         # Step 3: Convert simple quotes
         text = re.sub(
             r'\[quote\](.*?)\[/quote\]',
             r'<blockquote class="simple-quote">\1</blockquote>',
-            text, flags=re.DOTALL
+            text, flags=re.DOTALL | re.IGNORECASE
         )
         
         # Step 4: Convert user mentions @"UserName" with proper links
