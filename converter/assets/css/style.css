@@ -555,12 +555,14 @@ main {
     }
     
     header nav {
-        gap: 10px;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
     }
-    
+
     header nav a {
-        padding: 6px 10px;
-        font-size: 16px;
+        padding: 5px 9px;
+        font-size: 15px;
     }
     
     /* Mobile your-posts form */
@@ -612,6 +614,12 @@ main {
     header nav {
         justify-content: center;
         width: 100%;
+        gap: 4px;
+    }
+
+    header nav a {
+        padding: 4px 8px;
+        font-size: 14px;
     }
     
     .author-selector {
