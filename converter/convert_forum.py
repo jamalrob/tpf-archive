@@ -601,7 +601,7 @@ class PlushForumsConverter:
         
         # [quote=label]...[/quote] (unquoted attribute, e.g. manual book/source quotes)
         text = re.sub(
-            r'\[quote=([^\]"]+)\](.*?)\[/quote\]',
+            r'\[quote=([^\]]+)\](.*?)\[/quote\]',
             r'<blockquote class="user-quote"><cite>\1:</cite>\2</blockquote>',
             text, flags=re.DOTALL
         )
