@@ -7,6 +7,7 @@ import json
 import os
 import re
 import csv
+import hashlib
 from datetime import datetime
 from pathlib import Path
 import html
@@ -40,6 +41,7 @@ class PlushForumsConverter:
         self.discussions = {}
         self.comments = {}
         self.members = {}
+        self.member_profiles = {}
         self.categories = {}
         self._cssversion = None
         self._template_cache = {}  # ← Store templates here
@@ -364,9 +366,27 @@ class PlushForumsConverter:
                 
                 user_id = member_data['UserID']
                 username = member_data['Name']
-                
-                # Only store the ID and username
+
+                # Store the ID and username
                 self.members[user_id] = username
+
+                # Store extended profile data
+                meta = member_data.get('Meta', {}) or {}
+                self.member_profiles[user_id] = {
+                    'username': username,
+                    'location': self.fix_windows_1252_encoding(meta.get('Location', '') or ''),
+                    'bio': self.fix_windows_1252_encoding(meta.get('BioInfo', '') or ''),
+                    'fav_philosopher': self.fix_windows_1252_encoding(meta.get('bm_favourite-philosopher', '') or ''),
+                    'fav_quotations': self.fix_windows_1252_encoding(meta.get('bm_favourite-quotations', '') or ''),
+                    'roles': member_data.get('Roles', ''),
+                    'date_joined': member_data.get('DateFirstVisit', ''),
+                    'date_last_active': member_data.get('DateLastActive', ''),
+                    'deleted': bool(member_data.get('Deleted', False)),
+                    'banned': bool(member_data.get('Banned', False)),
+                    'count_discussions': member_data.get('CountDiscussions', 0),
+                    'count_comments': member_data.get('CountComments', 0),
+                }
+
                 loaded_count += 1
                 
             except Exception as e:
@@ -782,19 +802,28 @@ class PlushForumsConverter:
         # Get author username
         author_id = discussion['InsertUserID']
         author_name = self.get_username(author_id)
-        
+        if author_name != "Deleted user":
+            author_display = f'<a href="/members/{author_id}.html" class="author-link">{html.escape(author_name)}</a>'
+        else:
+            author_display = html.escape(author_name)
+
         # Generate comments HTML
         comments_html = ""
         for comment in page_comments:
             comment_body = self.convert_plush_bbcode(comment['Body'], disc_id)
-            comment_author_name = self.get_username(comment['InsertUserID'])
-            
+            comment_author_id = comment['InsertUserID']
+            comment_author_name = self.get_username(comment_author_id)
+            if comment_author_name != "Deleted user":
+                comment_author_display = f'<a href="/members/{comment_author_id}.html" class="author-link">{html.escape(comment_author_name)}</a>'
+            else:
+                comment_author_display = html.escape(comment_author_name)
+
             comments_html += f"""
                 <div class="comment" id="comment-{comment['CommentID']}">
                     <div class="comment-meta">
-                        <span class="author">{html.escape(comment_author_name)}</span>
+                        <span class="author">{comment_author_display}</span>
                         <span class="date">{self.format_date(comment['DateInserted'])}</span>
-                        <span class="comment-id"><a href="#comment-{comment['CommentID']}">#{comment['CommentID']}</a></span>
+                        <span class="comment-id"><a href="#comment-{comment['CommentID']}" class="comment-permalink" title="Copy link" onclick="copyPermalink(event,this)">¶ #{comment['CommentID']}</a></span>
                         <span class="likes">{comment.get('Likes', 0)} likes</span>
                     </div>
                     <div class="comment-content">
@@ -813,16 +842,26 @@ class PlushForumsConverter:
         header_html = self.load_template('header.html')
         footer_html = self.load_template('footer.html')
 
+        # Category link
+        cat_id = discussion.get('CategoryID')
+        if cat_id and cat_id in self.categories:
+            cat_name = self.categories[cat_id]['Name']
+            cat_slug = self.generate_slug(cat_name)
+            category_html = f'<span class="category"><a href="/categories/{cat_id}-{cat_slug}.html">{html.escape(cat_name)}</a></span>'
+        else:
+            category_html = ''
+
         # Render content
         main_content = content_template.format(
             discussion_title=html.escape(discussion['Name']),
-            author_name=html.escape(author_name),
+            author_name=author_display,
             discussion_date=self.format_date(discussion['DateInserted']),
             view_count=discussion['CountViews'],
             comment_count=len(discussion_comments),
             discussion_body=discussion_body,
             comments_html=comments_html,
-            pagination_html=pagination_html
+            pagination_html=pagination_html,
+            category_html=category_html
         )
 
         if page_num == 1:
@@ -841,7 +880,22 @@ class PlushForumsConverter:
             cssversion=cssversion,
             buildversion=self.buildversion,
             extrahead="",
-            extrafoot="",
+            extrafoot=(
+                '<a href="#" class="back-to-top" aria-label="Back to top">⇧</a>'
+                '<script>'
+                'function copyPermalink(e,el){'
+                'e.preventDefault();'
+                'navigator.clipboard.writeText(el.href);'
+                'history.pushState(null,"",el.href);'
+                'var t=document.getElementById("permalink-toast");'
+                'if(!t){t=document.createElement("div");t.id="permalink-toast";document.body.appendChild(t);}'
+                't.textContent="Link copied";'
+                'clearTimeout(t._t);'
+                't.classList.add("show");'
+                't._t=setTimeout(function(){t.classList.remove("show")},1400);'
+                '}'
+                '</script>'
+            ),
             canonical_url=f"{self.site_url}" + pagepath,
             robot_block=robot_block,
             header=header_html,
@@ -873,6 +927,406 @@ class PlushForumsConverter:
             'total_pages': total_pages
         }
     
+    def _extract_discussion_meta(self, discussion):
+        """Extract discussion metadata without generating HTML. Used for two-pass build."""
+        disc_id = discussion['DiscussionID']
+        slug = self.generate_slug(discussion['Name'])
+        discussion_comments = self.comments.get(disc_id, [])
+        comments_per_page = self.config.get('comments_per_page', 100)
+        total_pages = (len(discussion_comments) + comments_per_page - 1) // comments_per_page
+        author_id = discussion['InsertUserID']
+        return {
+            'id': disc_id,
+            'title': discussion['Name'],
+            'date': discussion['DateInserted'],
+            'slug': slug,
+            'url': f"/discussions/{disc_id}-{slug}.html",
+            'comment_count': len(discussion_comments),
+            'author_id': author_id,
+            'category_id': discussion.get('CategoryID'),
+            'category_name': self.categories.get(discussion.get('CategoryID'), {}).get('Name', 'Uncategorized'),
+            'total_pages': total_pages,
+        }
+
+    def generate_related_discussions_html(self, disc_id, category_id, discussions_meta):
+        """Return HTML fragment for up to 5 most-recent discussions in the same category."""
+        related = [
+            d for d in discussions_meta
+            if d['category_id'] == category_id and d['id'] != disc_id
+        ][:5]
+        if not related:
+            return ''
+        items = ''.join(
+            f'<li><a href="{d["url"]}">{html.escape(d["title"])}</a></li>\n'
+            for d in related
+        )
+        return (
+            '<section class="related-discussions">'
+            '<h3>More from this category</h3>'
+            f'<ul>{items}</ul>'
+            '</section>'
+        )
+
+    def _generate_pagelist_html(self, current_page, total_pages, url_fn):
+        """Generate pagination HTML (1-indexed). url_fn(page_num) -> url string."""
+        if total_pages <= 1:
+            return ''
+        pagination_html = '<div class="pagination">'
+        if current_page > 1:
+            pagination_html += f'<a href="{url_fn(current_page - 1)}" class="pagination-arrow">← Previous</a> '
+        else:
+            pagination_html += '<span class="pagination-arrow disabled">← Previous</span> '
+        pagination_html += f'<span class="page-info">Page {current_page} of {total_pages}</span>'
+        if current_page < total_pages:
+            pagination_html += f' <a href="{url_fn(current_page + 1)}" class="pagination-arrow">Next →</a>'
+        else:
+            pagination_html += ' <span class="pagination-arrow disabled">Next →</span>'
+        pagination_html += '</div>'
+        return pagination_html
+
+    def generate_category_pages(self, discussions_meta):
+        """Generate paginated category listing pages and a categories index."""
+        print("Generating category pages...")
+        page_size = self.config.get('category_page_size', 50)
+        noindex_categories = self.config.get('noindex_categories', [])
+
+        # Group by category (discussions_meta already sorted newest-first)
+        by_category = {}
+        for disc in discussions_meta:
+            cat_id = disc['category_id']
+            by_category.setdefault(cat_id, []).append(disc)
+
+        categories_dir = self.output_path / "categories"
+        categories_dir.mkdir(parents=True, exist_ok=True)
+
+        layout_template = self.load_template('layout.html')
+        content_template = self.load_template('category.html')
+        index_template = self.load_template('categories-index.html')
+        header_html = self.load_template('header.html')
+        footer_html = self.load_template('footer.html')
+        cssversion = self.get_cssversion()
+
+        category_list_items = []
+
+        for cat_id, discs in by_category.items():
+            cat_info = self.categories.get(cat_id, {})
+            cat_name = cat_info.get('Name', 'Uncategorized')
+            cat_slug = self.generate_slug(cat_name)
+            total_pages = max(1, (len(discs) + page_size - 1) // page_size)
+
+            robot_block = ''
+            if cat_id in noindex_categories:
+                robot_block = '<meta name="robots" content="noindex, nofollow">'
+
+            for page_num in range(1, total_pages + 1):
+                start_idx = (page_num - 1) * page_size
+                page_discs = discs[start_idx:start_idx + page_size]
+
+                discussions_list = ''
+                for disc in page_discs:
+                    author_name = self.get_username(disc['author_id'])
+                    discussions_list += f"""
+                    <article class="discussion-summary">
+                        <h3><a href="{disc['url']}">{html.escape(disc['title'])}</a></h3>
+                        <div class="discussion-meta">
+                            <span class="author">by {html.escape(author_name)}</span>
+                            <span class="date">{self.format_date(disc['date'])}</span>
+                            <span class="comments">{disc['comment_count']} comments</span>
+                        </div>
+                    </article>"""
+
+                def page_url(p, _cat_id=cat_id, _cat_slug=cat_slug):
+                    if p == 1:
+                        return f"/categories/{_cat_id}-{_cat_slug}.html"
+                    return f"/categories/{_cat_id}-{_cat_slug}-page-{p}.html"
+
+                pagination_html = self._generate_pagelist_html(page_num, total_pages, page_url)
+
+                if page_num == 1:
+                    filename = f"{cat_id}-{cat_slug}.html"
+                    pagepath = f"categories/{filename}"
+                else:
+                    filename = f"{cat_id}-{cat_slug}-page-{page_num}.html"
+                    pagepath = f"categories/{filename}"
+
+                main_content = content_template.format(
+                    category_name=html.escape(cat_name),
+                    discussion_count=len(discs),
+                    top_pagination=pagination_html,
+                    bottom_pagination=pagination_html,
+                    discussions_list=discussions_list,
+                )
+                html_content = layout_template.format(
+                    title=html.escape(cat_name) + (f" - Page {page_num}" if page_num > 1 else ""),
+                    cssversion=cssversion,
+                    buildversion=self.buildversion,
+                    header=header_html,
+                    main=main_content,
+                    footer=footer_html,
+                    canonical_url=f"{self.site_url}{pagepath}",
+                    robot_block=robot_block,
+                    extrahead='',
+                    extrafoot='',
+                )
+                with open(categories_dir / filename, 'w', encoding='utf-8') as f:
+                    f.write(html_content)
+
+            category_list_items.append({
+                'name': cat_name,
+                'url': f"/categories/{cat_id}-{cat_slug}.html",
+                'count': len(discs),
+            })
+
+        # Alphabetical categories index
+        category_list_items.sort(key=lambda x: x['name'])
+        categories_list_html = ''.join(
+            f'<li><a href="{item["url"]}">{html.escape(item["name"])}</a>'
+            f' <span style="color:#666">({item["count"]} discussions)</span></li>\n'
+            for item in category_list_items
+        )
+        main_content = index_template.format(categories_list=categories_list_html)
+        html_content = layout_template.format(
+            title="Categories",
+            cssversion=cssversion,
+            buildversion=self.buildversion,
+            header=header_html,
+            main=main_content,
+            footer=footer_html,
+            canonical_url=f"{self.site_url}categories/",
+            robot_block='',
+            extrahead='',
+            extrafoot='',
+        )
+        with open(categories_dir / "index.html", 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        print(f"✅ Generated category pages for {len(by_category)} categories")
+
+    def generate_member_pages(self, discussions_meta):
+        """Generate member profile pages."""
+        print("Generating member pages...")
+        comments_per_page_member = 50
+        disc_comments_per_page = self.config.get('comments_per_page', 100)
+
+        members_dir = self.output_path / "members"
+        members_dir.mkdir(parents=True, exist_ok=True)
+
+        layout_template = self.load_template('layout.html')
+        content_template = self.load_template('member.html')
+        header_html = self.load_template('header.html')
+        footer_html = self.load_template('footer.html')
+        cssversion = self.get_cssversion()
+
+        # Build user→discussions map
+        user_discussions = {}
+        for disc in discussions_meta:
+            user_id = disc['author_id']
+            user_discussions.setdefault(user_id, []).append(disc)
+
+        # Build user→comments map (with URLs into discussion pages)
+        user_comments = {}
+        for disc_id, comments in self.comments.items():
+            disc_title = self.discussions[disc_id]['Name'] if disc_id in self.discussions else "Unknown Discussion"
+            disc_slug = self.generate_slug(disc_title)
+            for idx, comment in enumerate(comments):
+                user_id = comment['InsertUserID']
+                page = (idx // disc_comments_per_page) + 1
+                if page == 1:
+                    url = f"/discussions/{disc_id}-{disc_slug}.html#comment-{comment['CommentID']}"
+                else:
+                    url = f"/discussions/{disc_id}-{disc_slug}-page-{page}.html#comment-{comment['CommentID']}"
+                user_comments.setdefault(user_id, []).append({
+                    'id': comment['CommentID'],
+                    'discussion_title': disc_title,
+                    'discussion_url': f"/discussions/{disc_id}-{disc_slug}.html",
+                    'date': comment['DateInserted'],
+                    'url': url,
+                    'excerpt': self.make_excerpt(comment.get('Body', ''), 150),
+                })
+
+        generated = 0
+        skipped = 0
+
+        for user_id, username in self.members.items():
+            if username.lower() in self.excluded_users:
+                skipped += 1
+                continue
+
+            profile = self.member_profiles.get(user_id, {})
+            discs = user_discussions.get(user_id, [])
+            comments = sorted(user_comments.get(user_id, []), key=lambda x: x['date'], reverse=True)
+            total_comment_pages = max(1, (len(comments) + comments_per_page_member - 1) // comments_per_page_member)
+
+            def page_url(p, _uid=user_id):
+                return f"/members/{_uid}.html" if p == 1 else f"/members/{_uid}-page-{p}.html"
+
+            for page_num in range(1, total_comment_pages + 1):
+                page_comments = comments[(page_num - 1) * comments_per_page_member:page_num * comments_per_page_member]
+                pagination_html = self._generate_pagelist_html(page_num, total_comment_pages, page_url)
+
+                # Profile section: page 1 only
+                if page_num == 1:
+                    profile_section = self._render_member_profile_section(username, profile)
+                    discussions_section = self._render_member_discussions_section(discs)
+                else:
+                    profile_section = f'<div class="member-profile"><h1><a href="/members/{user_id}.html">{html.escape(username)}</a></h1></div>'
+                    discussions_section = ''
+
+                comments_html = self._render_member_comments_html(page_comments)
+
+                main_content = content_template.format(
+                    username=html.escape(username),
+                    profile_section=profile_section,
+                    discussions_section=discussions_section,
+                    comments_html=comments_html,
+                    top_pagination=pagination_html,
+                    bottom_pagination=pagination_html,
+                )
+
+                if page_num == 1:
+                    filename = f"{user_id}.html"
+                    pagepath = f"members/{filename}"
+                else:
+                    filename = f"{user_id}-page-{page_num}.html"
+                    pagepath = f"members/{filename}"
+
+                html_content = layout_template.format(
+                    title=f"{html.escape(username)}'s Profile" + (f" - Page {page_num}" if page_num > 1 else ""),
+                    cssversion=cssversion,
+                    buildversion=self.buildversion,
+                    header=header_html,
+                    main=main_content,
+                    footer=footer_html,
+                    canonical_url=f"{self.site_url}{pagepath}",
+                    robot_block='',
+                    extrahead='',
+                    extrafoot='<a href="#" class="back-to-top" aria-label="Back to top">⇧</a>',
+                )
+                with open(members_dir / filename, 'w', encoding='utf-8') as f:
+                    f.write(html_content)
+
+            generated += 1
+
+        print(f"✅ Generated pages for {generated} members, skipped {skipped} excluded users")
+
+    def _render_member_profile_section(self, username, profile):
+        """Build the profile info HTML for a member page (page 1 only)."""
+        status_badges = ''
+
+        roles = profile.get('roles', '') or ''
+        date_joined = self.format_date(profile['date_joined']) if profile.get('date_joined') else ''
+        date_last = self.format_date(profile['date_last_active']) if profile.get('date_last_active') else ''
+
+        meta_parts = []
+        if roles:
+            meta_parts.append(f'<span class="roles">{html.escape(str(roles))}</span>')
+        if date_joined:
+            meta_parts.append(f'<span>Joined: {date_joined}</span>')
+        if date_last:
+            meta_parts.append(f'<span>Last active: {date_last}</span>')
+        meta_parts.append(f'<span>{profile.get("count_discussions", 0)} discussions</span>')
+        meta_parts.append(f'<span>{profile.get("count_comments", 0)} comments</span>')
+        meta_html = f'<div class="member-meta">{"".join(meta_parts)}</div>' if meta_parts else ''
+
+        bio = profile.get('bio', '') or ''
+        bio_html = (
+            f'<div class="member-bio"><h3>Bio</h3><div>{self.convert_plush_bbcode(bio)}</div></div>'
+            if bio.strip() else ''
+        )
+
+        fav_phil = profile.get('fav_philosopher', '') or ''
+        fav_phil_html = (
+            f'<div class="member-fav-philosopher"><h3>Favourite Philosopher</h3><div>{self.convert_plush_bbcode(fav_phil)}</div></div>'
+            if fav_phil.strip() else ''
+        )
+
+        fav_quot = profile.get('fav_quotations', '') or ''
+        fav_quot_html = (
+            f'<div class="member-fav-quotations"><h3>Favourite Quotations</h3><div>{self.convert_plush_bbcode(fav_quot)}</div></div>'
+            if fav_quot.strip() else ''
+        )
+
+        location = profile.get('location', '') or ''
+        loc_html = f'<div class="member-location"><strong>Location:</strong> {html.escape(location)}</div>' if location.strip() else ''
+
+        return (
+            f'<div class="member-profile">'
+            f'<h1>{html.escape(username)}{status_badges}</h1>'
+            f'{meta_html}{loc_html}{bio_html}{fav_phil_html}{fav_quot_html}'
+            f'</div>'
+        )
+
+    def _render_member_discussions_section(self, discs):
+        """Build the discussions list HTML for a member page."""
+        if not discs:
+            return ''
+        items = ''
+        for disc in discs:
+            items += f"""
+            <article class="discussion-summary">
+                <h3><a href="{disc['url']}">{html.escape(disc['title'])}</a></h3>
+                <div class="discussion-meta">
+                    <span class="date">{self.format_date(disc['date'])}</span>
+                    <span class="comments">{disc['comment_count']} comments</span>
+                    <span class="category">{html.escape(disc['category_name'])}</span>
+                </div>
+            </article>"""
+        return f'<section class="member-discussions"><h2>Discussions ({len(discs)})</h2>{items}</section>'
+
+    def _render_member_comments_html(self, comments):
+        """Build the comments list HTML for a member page."""
+        if not comments:
+            return '<p style="color:#666">No comments.</p>'
+        items = ''
+        for c in comments:
+            items += f"""
+            <div class="member-comment-item">
+                <div class="comment-discussion">
+                    In: <a href="{c['discussion_url']}">{html.escape(c['discussion_title'])}</a>
+                    &nbsp;—&nbsp;<a href="{c['url']}">view comment</a>
+                </div>
+                <div class="comment-excerpt">{html.escape(c['excerpt'])}</div>
+                <div class="comment-date">{self.format_date(c['date'])}</div>
+            </div>"""
+        return items
+
+    def _compute_template_hash(self):
+        """MD5 of all template files + style.css."""
+        templates_dir = Path(__file__).parent / "templates"
+        css_file = Path(__file__).parent / "assets" / "css" / "style.css"
+        h = hashlib.md5()
+        for f in sorted(templates_dir.rglob("*.html")):
+            h.update(f.read_bytes())
+        if css_file.exists():
+            h.update(css_file.read_bytes())
+        return h.hexdigest()
+
+    def _compute_discussion_hash(self, disc_id):
+        """MD5 of discussion data + its comments."""
+        content = (
+            json.dumps(self.discussions[disc_id], sort_keys=True)
+            + json.dumps(self.comments.get(disc_id, []), sort_keys=True)
+        )
+        return hashlib.md5(content.encode('utf-8')).hexdigest()
+
+    def _load_build_manifest(self):
+        """Load the incremental build manifest, returning {} if missing."""
+        manifest_path = self.output_path / "processed_data" / "build_manifest.json"
+        if manifest_path.exists():
+            try:
+                with open(manifest_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {}
+
+    def _save_build_manifest(self, manifest):
+        """Save the incremental build manifest."""
+        manifest_path = self.output_path / "processed_data" / "build_manifest.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(manifest_path, 'w', encoding='utf-8') as f:
+            json.dump(manifest, f, ensure_ascii=False)
+
     def generate_user_posts_data(self, discussions_meta):
         """Generate user-specific data files and username lookup"""
         
@@ -1148,8 +1602,14 @@ class PlushForumsConverter:
             discussions_list = ""
             for disc in page_discussions:
                 author_name = self.get_username(disc['author_id'])
-                category_name = self.categories.get(disc['category_id'], {}).get('Name', 'Uncategorized')
-                
+                cat_id = disc['category_id']
+                category_name = self.categories.get(cat_id, {}).get('Name', 'Uncategorized') if cat_id else 'Uncategorized'
+                if cat_id:
+                    cat_slug = self.generate_slug(category_name)
+                    category_html = f'<a href="/categories/{cat_id}-{cat_slug}.html">{html.escape(category_name)}</a>'
+                else:
+                    category_html = html.escape(category_name)
+
                 discussions_list += f"""
                     <article class="discussion-summary">
                         <h3><a href="{disc['url']}">{html.escape(disc['title'])}</a></h3>
@@ -1157,7 +1617,7 @@ class PlushForumsConverter:
                             <span class="author">by {html.escape(author_name)}</span>
                             <span class="date">{self.format_date(disc['date'])}</span>
                             <span class="comments">{disc['comment_count']} comments</span>
-                            <span class="category">{html.escape(category_name)}</span>
+                            <span class="category">{category_html}</span>
                         </div>
                     </article>
                 """
@@ -1304,11 +1764,11 @@ class PlushForumsConverter:
 
         if html_only is None:
             html_only = self.config['html_only_mode']
-        
+
         if not html_only:
             # Load member data first
             self.load_member_data()
-            
+
             # Create output directory structure
             try:
                 (self.output_path / "discussions").mkdir(parents=True, exist_ok=True)
@@ -1321,83 +1781,102 @@ class PlushForumsConverter:
 
             # Load forum data
             self.load_data()
-            
+
             if not self.discussions:
                 print("No discussions loaded. Check the export path.")
                 return
-            
+
             # Save the processed data for html-only mode
             self._save_processed_data()
-            
-            # Generate discussion pages (only in full mode)
-            print("Generating discussion pages...")
-            discussions_meta = []
-            for disc_id, discussion in self.discussions.items():
+
+            # Pass 1: build discussions_meta (no HTML written yet), sort newest-first
+            print("Building discussions metadata (pass 1)...")
+            discussions_meta = [
+                self._extract_discussion_meta(d)
+                for d in self.discussions.values()
+            ]
+            discussions_meta.sort(key=lambda x: x['date'], reverse=True)
+
+            # Pass 2: generate HTML with incremental build support
+            print("Generating discussion pages (pass 2)...")
+            manifest = self._load_build_manifest()
+            template_hash = self._compute_template_hash()
+            templates_changed = manifest.get('template_hash') != template_hash
+            if templates_changed:
+                print("Templates changed — regenerating all discussion pages")
+            new_manifest = {'template_hash': template_hash, 'discussions': {}}
+            old_disc_hashes = manifest.get('discussions', {})
+
+            # Build O(1) lookup: disc_id -> meta
+            meta_by_id = {m['id']: m for m in discussions_meta}
+
+            generated = 0
+            skipped = 0
+            for discussion in self.discussions.values():
+                disc_id = discussion['DiscussionID']
+                meta = meta_by_id[disc_id]
+                disc_hash = self._compute_discussion_hash(disc_id)
+                new_manifest['discussions'][str(disc_id)] = disc_hash
+
+                output_file = self.output_path / "discussions" / f"{disc_id}-{meta['slug']}.html"
+                old_hash = old_disc_hashes.get(str(disc_id))
+                if not templates_changed and old_hash == disc_hash and output_file.exists():
+                    skipped += 1
+                    continue
+
                 print(f"Generating HTML for discussion: {discussion['Name']}")
-                # Generate first page and get metadata
-                meta = self.generate_discussion_page(discussion, page_num=1)
-                discussions_meta.append(meta)
-                
-                # Generate additional pages if needed
+                self.generate_discussion_page(discussion, page_num=1)
                 if meta['total_pages'] > 1:
                     for page_num in range(2, meta['total_pages'] + 1):
                         self.generate_discussion_page(discussion, page_num=page_num)
-                
+                generated += 1
+
+            self._save_build_manifest(new_manifest)
+            print(f"Generated {generated} discussions, skipped {skipped} unchanged")
+
         else:
             print("HTML-only mode: loading previously processed data...")
             if not self._load_processed_data():
                 print("ERROR: No previously processed data found.")
                 print("Please run full conversion first: python3 convert_forum.py")
                 return
-            
-            # In html-only mode, we need to rebuild discussions_meta without regenerating pages
+
+            # Rebuild discussions_meta from loaded data (no HTML written)
             print("Rebuilding discussions metadata...")
-            discussions_meta = []
-            for disc_id, discussion in self.discussions.items():
-                # Recreate the meta without regenerating the HTML page
-                disc_id = discussion['DiscussionID']
-                slug = self.generate_slug(discussion['Name'])
-                discussion_comments = self.comments.get(disc_id, [])
-                
-                discussions_meta.append({
-                    'id': disc_id,
-                    'title': discussion['Name'],
-                    'date': discussion['DateInserted'],
-                    'slug': slug,
-                    'url': f"/discussions/{disc_id}-{slug}.html",
-                    'comment_count': len(discussion_comments),
-                    'author_id': discussion['InsertUserID'],
-                    # ADD THESE TWO LINES:
-                    'category_id': discussion.get('CategoryID'),
-                    'category_name': self.categories.get(discussion.get('CategoryID'), {}).get('Name', 'Uncategorized')
-                })
-        
+            discussions_meta = [
+                self._extract_discussion_meta(d)
+                for d in self.discussions.values()
+            ]
+            discussions_meta.sort(key=lambda x: x['date'], reverse=True)
+
         # Copy static assets
         self.copy_assets()
 
         # From here down runs in both modes but uses pre-built discussions_meta
         print("Generating site infrastructure...")
-        
-       
-        # Generate user posts page and data (this should also check html_only mode)
+
+        # Generate user posts page and data (full mode only)
         if not html_only:
             print("Generating user posts data...")
             self.generate_user_posts_data(discussions_meta)
-            self.generate_user_search_index(discussions_meta)  # Add this
-            self.generate_user_data_chunks(discussions_meta)   # Add this            
+            self.generate_user_search_index(discussions_meta)
+            self.generate_user_data_chunks(discussions_meta)
+            print("Generating member pages...")
+            self.generate_member_pages(discussions_meta)
         else:
-            print("Skipping user posts data generation in html-only mode...")
-        
+            print("Skipping user posts data and member pages in html-only mode...")
+
         self.generate_about_page()
         self.generate_404_page()
         self.generate_your_posts_page(discussions_meta)
 
-        # Generate indexes (these are quick to regenerate)
+        # Generate indexes (quick to regenerate)
         self.generate_homepage(discussions_meta)
         self.generate_search_page(discussions_meta)
+        self.generate_category_pages(discussions_meta)
 
         count = self.write_sitemap(self.site_url, self.output_path)
-        print(f"sitemap.xml written with {count} URLs at {self.output_path / 'sitemap.xml'}")        
+        print(f"sitemap.xml written with {count} URLs at {self.output_path / 'sitemap.xml'}")
 
         print(f"Conversion complete! Output in: {self.output_path}")
         print(f"Processed {len(discussions_meta)} discussions")
@@ -1418,10 +1897,14 @@ class PlushForumsConverter:
         with open(data_dir / "members.json", 'w', encoding='utf-8') as f:
             json.dump(self.members, f, ensure_ascii=False, indent=2)
         
-        # ADD THIS: Save categories data
+        # Save categories data
         with open(data_dir / "categories.json", 'w', encoding='utf-8') as f:
             json.dump(self.categories, f, ensure_ascii=False, indent=2)
-        
+
+        # Save member profiles
+        with open(data_dir / "member_profiles.json", 'w', encoding='utf-8') as f:
+            json.dump(self.member_profiles, f, ensure_ascii=False, indent=2)
+
         print(f"Saved processed data to {data_dir}")
 
     def _load_processed_data(self):
@@ -1447,12 +1930,18 @@ class PlushForumsConverter:
                 # Convert string keys back to integers for members
                 self.members = {int(k): v for k, v in members_data.items()}
             
-            # ADD THIS: Load categories data
+            # Load categories data
             with open(data_dir / "categories.json", 'r', encoding='utf-8') as f:
                 categories_data = json.load(f)
-                # Convert string keys back to integers for categories
                 self.categories = {int(k): v for k, v in categories_data.items()}
-            
+
+            # Load member profiles (optional — may not exist in older builds)
+            profiles_path = data_dir / "member_profiles.json"
+            if profiles_path.exists():
+                with open(profiles_path, 'r', encoding='utf-8') as f:
+                    profiles_data = json.load(f)
+                    self.member_profiles = {int(k): v for k, v in profiles_data.items()}
+
             print(f"Loaded {len(self.discussions)} discussions, {len(self.comments)} comment threads, {len(self.members)} members, {len(self.categories)} categories")
             return True
         except Exception as e:
