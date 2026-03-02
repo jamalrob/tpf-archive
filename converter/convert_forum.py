@@ -599,7 +599,13 @@ class PlushForumsConverter:
             text, flags=re.DOTALL
         )
         
-        # Rest of your existing BBCode processing remains the same...
+        # [quote=label]...[/quote] (unquoted attribute, e.g. manual book/source quotes)
+        text = re.sub(
+            r'\[quote=([^\]"]+)\](.*?)\[/quote\]',
+            r'<blockquote class="user-quote"><cite>\1:</cite>\2</blockquote>',
+            text, flags=re.DOTALL
+        )
+
         # Step 3: Convert simple quotes
         text = re.sub(
             r'\[quote\](.*?)\[/quote\]',
