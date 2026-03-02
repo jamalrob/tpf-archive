@@ -14,6 +14,13 @@ OUTPUT  = Path(__file__).parent.parent / "user-index" / "users.json"
 
 OMIT = {"Password", "LastIPAddress", "Photo", "Meta"}
 
+META_FIELDS = {
+    "bm_favourite-philosopher": "FavouritePhilosopher",
+    "bm_favourite-quotations": "FavouriteQuotations",
+    "BioInfo": "Bio",
+    "Location": "Location",
+}
+
 def main():
     OUTPUT.parent.mkdir(exist_ok=True)
 
@@ -24,7 +31,12 @@ def main():
         email = data.get("Email", "").strip().lower()
         if not email:
             continue
-        index[email] = {k: v for k, v in data.items() if k not in OMIT}
+        entry = {k: v for k, v in data.items() if k not in OMIT}
+        meta = data.get("Meta", {})
+        for src, dest in META_FIELDS.items():
+            if src in meta:
+                entry[dest] = meta[src]
+        index[email] = entry
 
     with open(OUTPUT, "w", encoding="utf-8") as f:
         json.dump(index, f, indent=2)
