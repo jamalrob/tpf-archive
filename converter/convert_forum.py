@@ -317,13 +317,13 @@ class PlushForumsConverter:
             shutil.copy2(robots_source, self.output_path / "robots.txt")
             print("✅ Copied robots.txt to root")
 
-        # Copy favicons to root
+        # Copy favicons and OG image to root
         assets_img = Path(__file__).parent / "assets" / "img"
-        for favicon in ["favicon.ico", "favicon-64.png"]:
-            src = assets_img / favicon
+        for filename in ["favicon.ico", "favicon-64.png", "og-image.png"]:
+            src = assets_img / filename
             if src.exists():
-                shutil.copy2(src, self.output_path / favicon)
-        print("✅ Copied favicons to root")
+                shutil.copy2(src, self.output_path / filename)
+        print("✅ Copied favicons and OG image to root")
 
 
     def load_member_data(self):
