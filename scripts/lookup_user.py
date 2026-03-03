@@ -29,9 +29,9 @@ def print_readable(result):
     roles   = result.get("Roles") or []
     joined  = format_date(result.get("DateFirstVisit", ""))
     active  = format_date(result.get("DateLastActive", ""))
-    discs   = result.get("CountDiscussions", 0)
-    posts   = result.get("CountComments", 0)
-    liked   = result.get("Liked", 0)
+    discs   = result.get("CountDiscussions") or 0
+    posts   = result.get("CountComments") or 0
+    liked   = result.get("Liked") or 0
     loc     = result.get("Location", "").strip()
     fav_phil = result.get("FavouritePhilosopher", "").strip()
     fav_quot = result.get("FavouriteQuotations", "").strip()
@@ -65,7 +65,7 @@ def print_readable(result):
         lines.append("")
         lines.append("Favourite quotations:")
         for line in fav_quot.splitlines():
-            lines.append(f"  {line}")
+            lines.append(line.strip())
 
     print("\n".join(lines))
 
