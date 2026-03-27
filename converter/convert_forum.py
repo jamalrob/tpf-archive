@@ -590,9 +590,13 @@ class PlushForumsConverter:
         # Ensure text is properly decoded as UTF-8
         if isinstance(text, bytes):
             text = text.decode('utf-8')
-        
-        # Your existing dash debugging code...
-        
+
+        # Escape raw HTML characters so literal <, >, & in post text don't
+        # become HTML tags/entities. Must happen before BBCode processing
+        # (BBCode uses [] so this is safe). quote=False preserves " so that
+        # BBCode tag patterns like [quote="user;id"] still match.
+        text = html.escape(text, quote=False)
+
         # Your existing line break processing
         text = text.replace('\r\n', '\n').replace('\r', '\n')
         text = text.replace('\n', '<br>\n')
@@ -1291,7 +1295,7 @@ class PlushForumsConverter:
         return items
 
     def _compute_template_hash(self):
-        """MD5 of all template files + style.css."""
+        """MD5 of all template files + style.css + the converter script itself."""
         templates_dir = Path(__file__).parent / "templates"
         css_file = Path(__file__).parent / "assets" / "css" / "style.css"
         h = hashlib.md5()
@@ -1299,6 +1303,7 @@ class PlushForumsConverter:
             h.update(f.read_bytes())
         if css_file.exists():
             h.update(css_file.read_bytes())
+        h.update(Path(__file__).read_bytes())
         return h.hexdigest()
 
     def _compute_discussion_hash(self, disc_id):
