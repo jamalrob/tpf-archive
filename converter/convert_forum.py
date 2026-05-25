@@ -1743,6 +1743,7 @@ class PlushForumsConverter:
         <script src="/assets/js/categories-data.js?v={self.buildversion}"></script>
         <script src="/assets/js/search-data.js?v={self.buildversion}"></script>
         <script src="/assets/js/search.js?v={self.buildversion}"></script>
+        <script src="/assets/js/search-fulltext.js?v={self.buildversion}"></script>
         """
 
         # Then render layout with content

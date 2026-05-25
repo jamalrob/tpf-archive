@@ -1,44 +1,61 @@
 <main class="search-interface">
     <h1>Search Forum Archive</h1>
-    <p>Search discussion titles and authors only</p>
-    
-    <div class="search-controls">
-        <div style="display: flex; gap: 10px; align-items: center;">
-            <input type="text" id="searchInput" placeholder="Search discussion titles..." 
-                  style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
-        </div>
-        
-        <div class="search-filters">
-            <div class="filter-group">
-                <label for="authorFilter">Filter by Author</label>
-                <input type="text" id="authorFilter" placeholder="Username...">
-                <div class="author-hint">Leave empty to search all authors</div>
-            </div>
-            <div class="filter-group">
-                <label for="dateSort">Sort By</label>
-                <select id="dateSort">
-                    <option value="relevance">Relevance</option>
-                    <option value="newest">Newest First</option>
-                    <option value="oldest">Oldest First</option>
-                </select>
-            </div>
-            <div class="filter-group">
-                <label for="categoryFilter">Category</label>
-                <select id="categoryFilter">
-                    <option value="">All Categories</option>
-                    <!-- Categories will be populated by JavaScript -->
-                </select>                
-            </div>
-        </div>
-        <button id="searchButton" style="padding: 12px 24px;">Search</button>
-    </div>
-    
-    <div class="search-stats" id="searchStats"></div>
-    <div id="searchResults"></div>
 
-    <div class="search-tip">
-        <strong>Want to search inside discussions and comments?</strong>
-        Use Google with the <code>site:</code> operator — for example:<br>
-        <a href="https://www.google.com/search?q=site%3Aarchive.thephilosophyforum.com+%22critique+of+pure+reason%22" target="_blank" rel="noopener">site:archive.thephilosophyforum.com "critique of pure reason"</a>
+    <div class="search-tabs" role="tablist">
+        <button class="search-tab active" role="tab" aria-selected="true" data-tab="title">Title &amp; Author</button>
+        <button class="search-tab" role="tab" aria-selected="false" data-tab="fulltext">Full Text</button>
+    </div>
+
+    <div id="tab-title" class="search-tab-panel">
+        <p class="search-desc">Search discussion titles and authors</p>
+
+        <div class="search-controls">
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="searchInput" placeholder="Search discussion titles..."
+                      style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
+            </div>
+
+            <div class="search-filters">
+                <div class="filter-group">
+                    <label for="authorFilter">Filter by Author</label>
+                    <input type="text" id="authorFilter" placeholder="Username...">
+                    <div class="author-hint">Leave empty to search all authors</div>
+                </div>
+                <div class="filter-group">
+                    <label for="dateSort">Sort By</label>
+                    <select id="dateSort">
+                        <option value="relevance">Relevance</option>
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="categoryFilter">Category</label>
+                    <select id="categoryFilter">
+                        <option value="">All Categories</option>
+                        <!-- Categories will be populated by JavaScript -->
+                    </select>
+                </div>
+            </div>
+            <button id="searchButton" style="padding: 12px 24px;">Search</button>
+        </div>
+
+        <div class="search-stats" id="searchStats"></div>
+        <div id="searchResults"></div>
+    </div>
+
+    <div id="tab-fulltext" class="search-tab-panel" hidden>
+        <p class="search-desc">Search inside all discussions and comments</p>
+
+        <div class="search-controls">
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="fulltextInput" placeholder="Search all posts..."
+                      style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
+            </div>
+            <button id="fulltextButton" style="padding: 12px 24px; margin-top: 20px;">Search</button>
+        </div>
+
+        <div class="search-stats" id="fulltextStats"></div>
+        <div id="fulltextResults"></div>
     </div>
 </main>
