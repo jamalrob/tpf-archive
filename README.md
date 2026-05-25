@@ -42,6 +42,30 @@ All content is rendered ahead of time. The resulting site is fully static.
 - Search indexes generated at build time
 - Static HTML output suitable for long-term hosting
 
+## Building
+
+```sh
+python3 converter/convert_forum.py
+npx pagefind --site build/static_archive --glob "discussions/*.html"
+```
+
+The first command generates the static site. The second builds the full-text search index using [Pagefind](https://pagefind.app), which crawls the rendered HTML and produces a chunked, on-demand index under `build/static_archive/pagefind/`. Both steps are required before deploying.
+
+To deploy:
+
+```sh
+bash scripts/deploy.sh
+```
+
+## Search
+
+The archive has two search modes:
+
+- **Title & Author** — client-side search over discussion titles and authors using a pre-built JSON index, loaded on page load
+- **Full Text** — full-text search over all discussion and comment content, powered by Pagefind; index chunks are loaded on demand per query
+
+Phrase search is supported in the full-text mode: wrap terms in quotation marks (e.g. `"categorical imperative"`) for exact matches.
+
 ## Implementation notes
 
 The generator is written in Python and operates entirely on exported forum data. Runtime performance is achieved through precomputation:
