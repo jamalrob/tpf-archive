@@ -859,7 +859,9 @@ class PlushForumsConverter:
         main_content = content_template.format(
             discussion_title=html.escape(discussion['Name']),
             author_name=author_display,
+            discussion_author_plain=html.escape(author_name),
             discussion_date=self.format_date(discussion['DateInserted']),
+            discussion_date_iso=discussion['DateInserted'][:10],
             view_count=discussion['CountViews'],
             comment_count=len(discussion_comments),
             discussion_body=discussion_body,

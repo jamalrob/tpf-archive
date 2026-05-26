@@ -11,11 +11,18 @@
         }
     }
 
+    function formatDate(isoDate) {
+        if (!isoDate) return '';
+        var d = new Date(isoDate);
+        return d.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+
     async function performFullTextSearch() {
         var input = document.getElementById('fulltextInput');
         var resultsEl = document.getElementById('fulltextResults');
         var statsEl = document.getElementById('fulltextStats');
         var btn = document.getElementById('fulltextButton');
+        var sortEl = document.getElementById('fulltextSort');
 
         var query = input.value.trim();
         if (!query) return;
@@ -33,7 +40,12 @@
             return;
         }
 
-        var search = await pf.search(query);
+        var sortValue = sortEl ? sortEl.value : 'relevance';
+        var searchOptions = {};
+        if (sortValue === 'newest') searchOptions.sort = { date: 'desc' };
+        if (sortValue === 'oldest') searchOptions.sort = { date: 'asc' };
+
+        var search = await pf.search(query, searchOptions);
 
         if (search.results.length === 0) {
             statsEl.textContent = '';
@@ -58,6 +70,15 @@
             var div = document.createElement('div');
             div.className = 'search-result';
 
+            var author = result.meta.author || '';
+            var date = formatDate(result.meta.date);
+            var metaParts = [];
+            if (author) metaParts.push('By <strong>' + author + '</strong>');
+            if (date) metaParts.push(date);
+            var metaHtml = metaParts.length
+                ? '<div class="result-meta">' + metaParts.join(' • ') + '</div>'
+                : '';
+
             var excerptHtml = '';
             if (result.sub_results && result.sub_results.length > 0) {
                 excerptHtml = result.sub_results.slice(0, 3).map(function (sub) {
@@ -69,6 +90,7 @@
 
             div.innerHTML =
                 '<h3><a href="' + result.url + '">' + (result.meta.title || result.url) + '</a></h3>' +
+                metaHtml +
                 excerptHtml;
             container.appendChild(div);
         });

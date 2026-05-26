@@ -52,6 +52,16 @@
                 <input type="text" id="fulltextInput" placeholder="Search all posts..."
                       style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
             </div>
+            <div class="search-filters">
+                <div class="filter-group">
+                    <label for="fulltextSort">Sort By</label>
+                    <select id="fulltextSort">
+                        <option value="relevance">Relevance</option>
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                    </select>
+                </div>
+            </div>
             <button id="fulltextButton" style="padding: 12px 24px; margin-top: 20px;">Search</button>
         </div>
 

@@ -1,7 +1,9 @@
 <main class="discussion-container" data-pagefind-body>
     <article class="discussion">
         <div class="discussion-header" id="discussion-top">
-            <h1>{discussion_title}</h1>
+            <h1 data-pagefind-meta="title">{discussion_title}</h1>
+            <span data-pagefind-meta="author" hidden>{discussion_author_plain}</span>
+            <span data-pagefind-meta="date" data-pagefind-sort="date" hidden>{discussion_date_iso}</span>
             <div class="discussion-meta">
                 <span class="author">{author_name}</span>
                 <span class="date">{discussion_date}</span>
